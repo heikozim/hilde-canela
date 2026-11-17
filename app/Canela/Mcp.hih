@@ -1,0 +1,126 @@
+--
+-- Part of Canela, a Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+"""
+Canela as a server of the Model Context Protocol over stdio, as `canela
+--mcp` runs it for Claude Desktop: one JSON-RPC message a line on the
+standard input, the answers on the standard output, logging on the error
+output, until the input ends.  The protocol is Wolly.Mcp, the tools are
+Wolly.DocumentTools on the files named.
+
+- When Canela runs, it listens on the socket mcpSocketPath (mode 0600, in
+  the user's Library/Application Support/Canela); canela --mcp then only
+  passes the bytes both ways, and the window does the work on its open
+  document, each edit one step of its undo.  Without a running Canela,
+  canela --mcp works on the files itself.
+- The window polls its McpLink twenty times a second; one client at a
+  time, a second one is closed at once.
+
+    let status: Int32 := runMcp("0.1.0", fonts);
+"""
+import Standard.String (
+    String,
+    length
+);
+import Wolly.Mcp (
+    McpStep
+);
+import Wolly.MarkdownPdf (
+    PdfFontFiles
+);
+
+module Canela.Mcp is
+    """
+    Serves until the standard input ends: 0 then, 1 when a standard stream
+    could not be had or the input failed.
+    """
+    generic [V: Region]
+    function runMcp(version: Span[Nat8, V], fonts: PdfFontFiles): Int32
+        requires (spanLength(version) > 0) and (spanLength(version) <= 64)
+        ensures (result = 0) or (result = 1);
+
+    """
+    The socket of the running Canela: the environment variable
+    CANELA_MCP_SOCKET when it is set (for tests), else Library/Application
+    Support/Canela/mcp.sock in the home folder; empty without a home.
+    """
+    function mcpSocketPath(): String
+        ensures length(&result) <= 4200;
+
+    """
+    The listening socket of the window, its client, the bytes of a line not
+    yet complete, the server and the documents the tools opened besides the
+    one in the window.  Linear: closeLink gives it back.
+    """
+    type McpLink: Linear;
+
+    """
+    A link listening on mcpSocketPath; one that listens nowhere when the
+    socket cannot be made (another Canela listens there).
+    """
+    generic [V: Region]
+    function openLink(version: Span[Nat8, V]): McpLink
+        requires (spanLength(version) > 0) and (spanLength(version) <= 64);
+
+    """
+    Stops listening, removes the socket, closes the client.
+    No contract: it only frees or closes what it is given.
+    """
+    function closeLink(link: McpLink): Unit;
+
+    """
+    A client accepted when there is none, and what it sent read, without
+    waiting.
+    No contract: what comes depends on the client.
+    """
+    function pollLink(link: McpLink): McpLink;
+
+    """
+    The next complete line the client sent, taken out; None when there is
+    no complete line.
+    No contract: an Option result, which an ensures cannot look into.
+    """
+    generic [R: Region]
+    function nextLine(link: &![McpLink, R]): Option[String];
+
+    """
+    What the server of the link makes of line.
+    No contract: the step depends on the line.
+    """
+    generic [R: Region, L: Region]
+    function stepOf(link: &![McpLink, R], line: Span[Nat8, L]): McpStep;
+
+    """
+    line and a line feed written to the client; nothing without a client.
+    No contract: I/O.
+    """
+    generic [R: Region, L: Region]
+    function sendLine(link: &![McpLink, R], line: Span[Nat8, L]): Unit;
+
+    """
+    The answer to request id of tools/call: text, failed or not.
+    """
+    generic [R: Region, I: Region, T: Region]
+    function replyOf(link: &[McpLink, R], id: Span[Nat8, I], text: Span[Nat8, T], failed: Bool): String
+        requires spanLength(id) > 0
+        ensures length(&result) > 0;
+
+    """
+    What a tool did on the documents of a link.
+    """
+    record LinkRun: Linear is
+        link: McpLink;
+        text: String;
+        failed: Bool;
+    end;
+
+    """
+    tool with arguments run on the documents of the link (not the window's).
+    No contract: what a tool does depends on its arguments and the files.
+    """
+    generic [T: Region, A: Region]
+    function runOnLink(link: McpLink, tool: Span[Nat8, T], arguments: Span[Nat8, A], fonts: PdfFontFiles): LinkRun;
+end module.

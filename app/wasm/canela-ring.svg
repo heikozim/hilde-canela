@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" role="img" aria-label="A golden ring">
+  <rect width="240" height="240" rx="24" fill="#151a24"/>
+  <circle cx="120" cy="120" r="80" fill="none" stroke="#e2b25c" stroke-width="6"/>
+  <path d="M 52 168 A 92 92 0 0 0 188 168" fill="none" stroke="#e2b25c" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 176 70 l 4 10 l 10 4 l -10 4 l -4 10 l -4 -10 l -10 -4 l 10 -4 z" fill="#e2b25c"/>
+  <path d="M 72 158 c -5 -7 -15 -2 -10 7 l 10 10 l 10 -10 c 5 -9 -5 -14 -10 -7 z" fill="#e2b25c"/>
+  <text x="120" y="130" text-anchor="middle" font-family="system-ui, sans-serif" font-size="34" font-weight="600" fill="#e2b25c">Canela</text>
+</svg>

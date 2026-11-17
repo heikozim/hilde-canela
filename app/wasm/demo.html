@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  Part of Canela, a live Markdown editor in Hilde.
+  SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canela in the browser</title>
+<link rel="stylesheet" href="canela.css">
+<style>
+body { font-family: system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; }
+header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+header img { width: 96px; height: auto; border-radius: 12px; }
+header h1 { margin: 0; font-size: 28px; }
+header p { margin: 4px 0 0; color: #555; }
+pre#out { white-space: pre-wrap; font-size: 12px; background: #f4f4f4; padding: 8px; }
+</style>
+</head>
+<body>
+<header>
+<img src="canela-logo.jpeg" alt="Canela logo: a chihuahua in a golden ring">
+<div>
+<h1>CANELA</h1>
+<p>Clean And Native Editor for Live Authoring</p>
+</div>
+</header>
+<form>
+<textarea id="content" name="content"><h2>Welcome</h2><p>A <strong>bold</strong> and an <em>italic</em> text with a <a href="https://example.com">link</a>.</p><ul><li>one</li><li>two</li></ul><p><img src="/canela-ring.svg" alt="A golden ring, drawn as SVG"></p><table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table></textarea>
+</form>
+<p><button id="show" type="button">getData()</button></p>
+<pre id="out"></pre>
+<script type="module">
+import { Canela } from "./canela.js";
+const editor = await Canela.create(document.getElementById("content"), {
+  locale: "en",
+  mode: new URLSearchParams(location.search).get("mode") || "auto",
+  upload: async (file) => URL.createObjectURL(file),
+});
+window.canelaEditor = editor;
+document.getElementById("show").addEventListener("click", () => {
+  document.getElementById("out").textContent = editor.getData();
+});
+</script>
+</body>
+</html>

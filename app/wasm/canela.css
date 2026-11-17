@@ -1,0 +1,107 @@
+/* Part of Canela, a live Markdown editor in Hilde.
+   SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+   SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+   The look of Canela on a web page; a host overrides the custom properties. */
+
+.canela {
+	--canela-border: #c8c8c8;
+	--canela-focus: #2f6fd0;
+	--canela-mark: #9a9a9a;
+	--canela-selected: #b8d4ff;
+	--canela-code: #f2f2f2;
+	--canela-background: #fff;
+	--canela-text: #1d1d1f;
+	position: relative;
+	border: 1px solid var(--canela-border);
+	border-radius: 4px;
+	background: var(--canela-background);
+	color: var(--canela-text);
+}
+.canela.canela-focus { border-color: var(--canela-focus); }
+.canela-toolbar {
+	display: flex; flex-wrap: wrap; gap: 2px; padding: 4px;
+	border-bottom: 1px solid var(--canela-border);
+}
+.canela-toolbar button, .canela-toolbar select {
+	font: inherit; font-size: 13px; padding: 2px 6px; border: 1px solid transparent;
+	border-radius: 3px; background: transparent; color: inherit; cursor: pointer;
+}
+.canela-toolbar button:hover, .canela-toolbar button:focus-visible { border-color: var(--canela-border); }
+.canela-sep { width: 1px; margin: 2px 4px; background: var(--canela-border); }
+.canela-surface {
+	min-height: 12em; max-height: 70vh; overflow: auto; padding: 8px 12px;
+	cursor: text; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5;
+	user-select: none; -webkit-user-select: none;
+}
+.canela-input {
+	position: absolute; width: 1px; height: 1em; opacity: 0; padding: 0; border: 0;
+	resize: none; overflow: hidden; pointer-events: none;
+}
+.canela-status { font-size: 12px; color: var(--canela-mark); padding: 2px 8px; text-align: right; }
+.canela-block { margin: 0 0 0.5em; }
+.canela-bullet, .canela-ordered, .canela-task { margin-left: calc(1.5em * var(--level, 1)); }
+.canela-bullet::before, .canela-ordered::before {
+	content: attr(data-marker); display: inline-block; min-width: 1.5em; margin-left: -1.5em;
+}
+.canela-task input { margin: 0 0.4em 0 -1.4em; }
+.canela-quote { border-left: 3px solid var(--canela-border); padding-left: 0.8em; color: #555; }
+.canela-fence, .canela-mermaid, .canela-frontmatter, .canela-code {
+	font-family: ui-monospace, Menlo, monospace; background: var(--canela-code);
+}
+.canela-fence, .canela-mermaid, .canela-frontmatter { padding: 0.5em; border-radius: 3px; }
+.canela-table { font-family: ui-monospace, Menlo, monospace; }
+.canela-rule { border-bottom: 1px solid var(--canela-border); }
+.canela-raw .canela-block { font-family: ui-monospace, Menlo, monospace; margin: 0; }
+.canela-mark { color: var(--canela-mark); }
+.canela-hidden { display: none; }
+.canela-strong { font-weight: bold; }
+.canela-em { font-style: italic; }
+.canela-strike { text-decoration: line-through; }
+.canela-link, .canela-autolink, .canela-barelink { color: var(--canela-focus); text-decoration: underline; }
+.canela-mark.canela-link { text-decoration: none; }
+.canela-sub { vertical-align: sub; font-size: 0.8em; }
+.canela-sup { vertical-align: super; font-size: 0.8em; }
+.canela-mark-span, .canela-mark.canela-mark { background: none; }
+.canela-selected { background: var(--canela-selected); }
+/* Inline, not inline-block: an atomic box is a place to break a line, and
+   at a wrapped blank it stayed at the end of the line above; inline it goes
+   with the text after it. */
+.canela-caret {
+	display: inline; margin-right: -1.5px;
+	border-left: 1.5px solid var(--canela-text);
+}
+.canela:not(.canela-focus) .canela-caret { visibility: hidden; }
+.canela.canela-focus .canela-caret { animation: canela-blink 1s step-end infinite; }
+@keyframes canela-blink { 50% { visibility: hidden; } }
+/* Light by default, as the page around it: a CMS form is light whatever the
+   scheme of the system, and a dark editor in it looked like a foreign body.
+   A host that wants it dark gives the editor the class canela-dark. */
+.canela.canela-dark {
+		--canela-border: #444; --canela-mark: #888; --canela-selected: #2b4a78;
+		--canela-code: #2a2a2a; --canela-background: #1e1e1e; --canela-text: #e8e8e8;
+}
+.canela.canela-dark .canela-quote { color: #bbb; }
+
+.canela-page { white-space: normal; user-select: none; }
+.canela-page .canela-htmlblock > :first-child { margin-top: 0.5em; }
+.canela-page img { max-width: 100%; }
+.canela-page table { border-collapse: collapse; }
+.canela-page td, .canela-page th { border: 1px solid var(--canela-border); padding: 2px 6px; }
+.canela-toolbar[hidden] { display: none; }
+
+/* The HTML mode shows the page as the site does, light, whatever the scheme
+   of the system: the content carries its own boxes (cards), white. */
+.canela-surface.canela-page { background: #fff; color: #1d1d1f; }
+.canela-surface.canela-page a { color: #2f6fd0; }
+
+/* Buttons with a symbol: square, the symbol in the colour of the text. */
+.canela-toolbar button.canela-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; padding: 0; }
+.canela-toolbar button.canela-icon svg { display: block; }
+.canela-toolbar { align-items: center; }
+
+/* The switch of the view names the view it is in. */
+.canela-toolbar button.canela-viewmode { margin-left: auto; font-weight: 600; border-color: var(--canela-border); }
+
+/* A picture in the Markdown view, drawn as itself. */
+.canela-surface img.canela-picture { max-width: 100%; height: auto; vertical-align: bottom; }

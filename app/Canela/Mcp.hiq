@@ -1,0 +1,535 @@
+--
+-- Part of Canela, a Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+import Standard.Buffer (
+    Buffer,
+    allocateEmpty,
+    length as bufferLength,
+    nth,
+    insertBack,
+    removeLast,
+    appendSpan,
+    wholeSpan,
+    destroyFree,
+    destroyEmpty,
+    nthRef
+);
+import Standard.String (
+    String,
+    asSpan,
+    length,
+    fromSpan,
+    destroyString
+);
+import Standard.Text (
+    substring
+);
+import Standard.File (
+    FileDescriptor,
+    kindOfTarget,
+    sameKind,
+    kind_regular,
+    WaitFailure,
+    WaitTimedOut,
+    WaitFailed,
+    standardStream,
+    makeNonblocking,
+    readWithin,
+    writeAll,
+    writeWithin,
+    closeFile,
+    Listener,
+    listenUnix,
+    acceptWithin,
+    connectUnix,
+    closeListener,
+    createDirectory,
+    environmentValue
+);
+import Standard.StringBuilder (
+    StringBuilder,
+    makeStringBuilder,
+    writeString,
+    finalize
+);
+import Wolly.Mcp (
+    McpServer,
+    McpStep,
+    Answer,
+    Silent,
+    Call,
+    destroyMcpServer,
+    handleLine,
+    toolReply,
+    mostMcpLine
+);
+import Wolly.DocumentTools (
+    Documents,
+    DocumentRun,
+    makeDocuments,
+    destroyDocuments,
+    documentToolServer,
+    runDocumentTool
+);
+import Wolly.MarkdownPdf (
+    PdfFontFiles
+);
+
+module body Canela.Mcp is
+    generic [V: Region]
+    function runMcp(version: Span[Nat8, V], fonts: PdfFontFiles): Int32 is
+        case standardStream(0) of
+            when Some(value as input: FileDescriptor) do
+                case standardStream(1) of
+                    when Some(value as output: FileDescriptor) do
+                        let path: String := mcpSocketPath();
+                        if length(&path) > 0 then
+                            case connectUnix(asSpan(&path)) of
+                                when Some(value as socket: FileDescriptor) do
+                                    destroyString(path);
+                                    return relay(input, output, socket);
+                                when None do
+                                    skip;
+                            end case;
+                        end if;
+                        destroyString(path);
+                        return serve(input, output, version, fonts);
+                    when None do
+                        let closed: Bool := closeFile(input);
+                        return 1;
+                end case;
+            when None do
+                return 1;
+        end case;
+    end;
+
+    generic [V: Region]
+    function serve(input: FileDescriptor, output: FileDescriptor, version: Span[Nat8, V], fonts: PdfFontFiles): Int32 is
+        var reader: FileDescriptor := input;
+        var writer: FileDescriptor := output;
+        var server: McpServer := documentToolServer("canela", version);
+        var documents: Documents := makeDocuments();
+        var pending: Buffer[Nat8] := allocateEmpty();
+        var status: Int32 := 0;
+        var going: Bool := makeNonblocking(&!reader);
+        if not going then
+            status := 1;
+        end if;
+        while going do
+            case readWithin(&!reader, 65536, 60000) of
+                when Right(right as chunk: String) do
+                    if length(&chunk) = 0 then
+                        going := false;
+                    else
+                        appendSpan(&!pending, asSpan(&chunk));
+                    end if;
+                    destroyString(chunk);
+                    if bufferLength(&pending) > mostMcpLine() then
+                        going := false;
+                        status := 1;
+                    end if;
+                    var more: Bool := going;
+                    while more do
+                        let cut: Index := lineEnd(&pending);
+                        if cut >= bufferLength(&pending) then
+                            more := false;
+                        else
+                            let line: Buffer[Nat8] := takeLine(&!pending, cut);
+                            documents := answerLine(&!server, documents, &!writer, wholeSpan(&line), fonts);
+                            destroyFree(line);
+                        end if;
+                    end while;
+                when Left(left as failure: WaitFailure) do
+                    case failure of
+                        when WaitTimedOut do
+                            skip;
+                        when WaitFailed do
+                            going := false;
+                            status := 1;
+                    end case;
+            end case;
+        end while;
+        destroyFree(pending);
+        destroyDocuments(documents);
+        destroyMcpServer(server);
+        let read_closed: Bool := closeFile(reader);
+        let write_closed: Bool := closeFile(writer);
+        return status;
+    end;
+
+    -- Where the first line feed in pending stands; its length when none.
+    generic [B: Region]
+    function lineEnd(pending: &[Buffer[Nat8], B]): Index is
+        var i: Index := 0;
+        while i < bufferLength(pending) do
+            if nth(pending, i) = 10 then
+                return i;
+            end if;
+            i := i + 1;
+        end while;
+        return bufferLength(pending);
+    end;
+
+    -- The bytes of pending before cut (a carriage return before it left
+    -- out), taken out of pending with the line feed at cut.
+    generic [B: Region]
+    function takeLine(pending: &![Buffer[Nat8], B], cut: Index): Buffer[Nat8] is
+        var line: Buffer[Nat8] := allocateEmpty();
+        var stop: Index := cut;
+        if (stop > 0) and (nth(&~pending, stop - 1) = 13) then
+            stop := stop - 1;
+        end if;
+        appendSpan(&!line, substring(wholeSpan(&~pending), 0, stop));
+        var rest: Buffer[Nat8] := allocateEmpty();
+        let size: Index := bufferLength(&~pending);
+        appendSpan(&!rest, substring(wholeSpan(&~pending), cut + 1, size));
+        clearBytes(&~pending);
+        appendSpan(&~pending, wholeSpan(&rest));
+        destroyFree(rest);
+        return line;
+    end;
+
+    generic [B: Region]
+    function clearBytes(bytes: &![Buffer[Nat8], B]): Unit is
+        while bufferLength(&~bytes) > 0 do
+            let gone: Nat8 := removeLast(&~bytes);
+        end while;
+        return nil;
+    end;
+
+    -- One line handled: its answer written, a tool run on the documents.
+    generic [S: Region, W: Region, L: Region]
+    function answerLine(server: &![McpServer, S], documents: Documents, writer: &![FileDescriptor, W], line: Span[Nat8, L], fonts: PdfFontFiles): Documents is
+        if spanLength(line) = 0 then
+            return documents;
+        end if;
+        case handleLine(&~server, line) of
+            when Answer(line as reply: String) do
+                writeLine(&~writer, asSpan(&reply));
+                destroyString(reply);
+                return documents;
+            when Silent do
+                return documents;
+            when Call(id as id: String, tool as tool: String, arguments as arguments: String) do
+                let done: DocumentRun := runDocumentTool(documents, asSpan(&tool), asSpan(&arguments), fonts);
+                let { documents as after: Documents, text: String, failed: Bool } := done;
+                let reply: String := toolReply(&~server, asSpan(&id), asSpan(&text), failed);
+                writeLine(&~writer, asSpan(&reply));
+                destroyString(reply);
+                destroyString(text);
+                destroyString(id);
+                destroyString(tool);
+                destroyString(arguments);
+                return after;
+        end case;
+    end;
+
+    generic [W: Region, L: Region]
+    function writeLine(writer: &![FileDescriptor, W], line: Span[Nat8, L]): Unit is
+        var bytes: Buffer[Nat8] := allocateEmpty();
+        appendSpan(&!bytes, line);
+        insertBack(&!bytes, 10);
+        let written: Bool := writeAll(writer, wholeSpan(&bytes));
+        destroyFree(bytes);
+        return nil;
+    end;
+    -- The proxy: the bytes of the standard input to the window's socket and
+    -- the socket's to the standard output, until either ends.
+    function relay(input: FileDescriptor, output: FileDescriptor, socket: FileDescriptor): Int32 is
+        var reader: FileDescriptor := input;
+        var writer: FileDescriptor := output;
+        var link: FileDescriptor := socket;
+        var going: Bool := makeNonblocking(&!reader) and makeNonblocking(&!link);
+        var input_open: Bool := true;
+        var status: Int32 := 0;
+        if not going then
+            status := 1;
+        end if;
+        while going do
+            -- After the input ended, the answers still due are passed on until
+            -- the socket stays quiet for a second.
+            if input_open then
+                case readWithin(&!reader, 65536, 20) of
+                    when Right(right as chunk: String) do
+                        if length(&chunk) = 0 then
+                            input_open := false;
+                        else
+                            case writeWithin(&!link, asSpan(&chunk), 10000) of
+                                when Right(right as sent: Unit) do
+                                    skip;
+                                when Left(left as failure: WaitFailure) do
+                                    going := false;
+                                    status := 1;
+                            end case;
+                        end if;
+                        destroyString(chunk);
+                    when Left(left as failure: WaitFailure) do
+                        case failure of
+                            when WaitTimedOut do
+                                skip;
+                            when WaitFailed do
+                                going := false;
+                                status := 1;
+                        end case;
+                end case;
+            end if;
+            if going then
+                var wait: Nat32 := 20;
+                if not input_open then
+                    wait := 1000;
+                end if;
+                case readWithin(&!link, 65536, wait) of
+                    when Right(right as chunk: String) do
+                        if length(&chunk) = 0 then
+                            going := false;
+                        else
+                            let written: Bool := writeAll(&!writer, asSpan(&chunk));
+                            if not written then
+                                going := false;
+                                status := 1;
+                            end if;
+                        end if;
+                        destroyString(chunk);
+                    when Left(left as failure: WaitFailure) do
+                        case failure of
+                            when WaitTimedOut do
+                                going := input_open;
+                            when WaitFailed do
+                                going := false;
+                                status := 1;
+                        end case;
+                end case;
+            end if;
+        end while;
+        let a: Bool := closeFile(reader);
+        let b: Bool := closeFile(writer);
+        let c: Bool := closeFile(link);
+        return status;
+    end;
+
+    function mcpSocketPath(): String is
+        case environmentValue("CANELA_MCP_SOCKET") of
+            when Some(value as chosen: String) do
+                if (length(&chosen) > 0) and (length(&chosen) <= 4096) then
+                    return chosen;
+                end if;
+                destroyString(chosen);
+            when None do
+                skip;
+        end case;
+        case environmentValue("HOME") of
+            when Some(value as home: String) do
+                if (length(&home) = 0) or (length(&home) > 4096) then
+                    destroyString(home);
+                    return fromSpan("");
+                end if;
+                var out: StringBuilder := makeStringBuilder();
+                writeString(&!out, asSpan(&home));
+                writeString(&!out, supportFolder());
+                writeString(&!out, "/mcp.sock");
+                destroyString(home);
+                return finalize(out);
+            when None do
+                return fromSpan("");
+        end case;
+    end;
+
+    -- The folder of Canela's files below the home folder: Library/Application
+    -- Support/Canela on macOS (its system fonts are there), .local/share/canela
+    -- elsewhere, as App.writeSupport.
+    function supportFolder(): Span[Nat8, Static] is
+        if sameKind(kindOfTarget("/System/Library/Fonts/Supplemental/Arial.ttf"), kind_regular) then
+            return "/Library/Application Support/Canela";
+        end if;
+        return "/.local/share/canela";
+    end;
+
+    -- The folder of the socket, made when it is not there.
+    function socketFolder(): String is
+        case environmentValue("CANELA_MCP_SOCKET") of
+            when Some(value as chosen: String) do
+                destroyString(chosen);
+                return fromSpan("/");
+            when None do
+                skip;
+        end case;
+        case environmentValue("HOME") of
+            when Some(value as home: String) do
+                var out: StringBuilder := makeStringBuilder();
+                writeString(&!out, asSpan(&home));
+                writeString(&!out, supportFolder());
+                destroyString(home);
+                return finalize(out);
+            when None do
+                return fromSpan("");
+        end case;
+    end;
+
+    record McpLink: Linear is
+        listener: Buffer[Listener];
+        client: Buffer[FileDescriptor];
+        pending: Buffer[Nat8];
+        server: McpServer;
+        documents: Documents;
+    end;
+
+    generic [V: Region]
+    function openLink(version: Span[Nat8, V]): McpLink is
+        var listener: Buffer[Listener] := allocateEmpty();
+        let folder: String := socketFolder();
+        let path: String := mcpSocketPath();
+        if (length(&folder) > 0) and (length(&path) > 0) then
+            let made: Bool := createDirectory(asSpan(&folder));
+            let mode: Nat32 := 384;
+            case listenUnix(asSpan(&path), mode) of
+                when Some(value as listening: Listener) do
+                    insertBack(&!listener, listening);
+                when None do
+                    skip;
+            end case;
+        end if;
+        destroyString(folder);
+        destroyString(path);
+        return McpLink(listener => listener, client => allocateEmpty(), pending => allocateEmpty(), server => documentToolServer("canela", version), documents => makeDocuments());
+    end;
+
+    function closeLink(link: McpLink): Unit is
+        let { listener: Buffer[Listener], client: Buffer[FileDescriptor], pending: Buffer[Nat8], server: McpServer, documents: Documents } := link;
+        var listeners: Buffer[Listener] := listener;
+        while bufferLength(&listeners) > 0 do
+            let closed: Bool := closeListener(removeLast(&!listeners));
+        end while;
+        destroyEmpty(listeners);
+        var clients: Buffer[FileDescriptor] := client;
+        while bufferLength(&clients) > 0 do
+            let closed: Bool := closeFile(removeLast(&!clients));
+        end while;
+        destroyEmpty(clients);
+        destroyFree(pending);
+        destroyMcpServer(server);
+        destroyDocuments(documents);
+        return nil;
+    end;
+
+    function pollLink(link: McpLink): McpLink is
+        let { listener: Buffer[Listener], client: Buffer[FileDescriptor], pending: Buffer[Nat8], server: McpServer, documents: Documents } := link;
+        var clients: Buffer[FileDescriptor] := client;
+        var bytes: Buffer[Nat8] := pending;
+        if bufferLength(&listener) > 0 then
+            case acceptWithin(nthListener(&listener), 0) of
+                when Some(value as fresh: FileDescriptor) do
+                    if bufferLength(&clients) = 0 then
+                        var accepted: FileDescriptor := fresh;
+                        if makeNonblocking(&!accepted) then
+                            insertBack(&!clients, accepted);
+                        else
+                            let closed: Bool := closeFile(accepted);
+                        end if;
+                    else
+                        let closed: Bool := closeFile(fresh);
+                    end if;
+                when None do
+                    skip;
+            end case;
+        end if;
+        if bufferLength(&clients) > 0 then
+            var open: FileDescriptor := removeLast(&!clients);
+            var keep_open: Bool := true;
+            case readWithin(&!open, 65536, 0) of
+                when Right(right as chunk: String) do
+                    if length(&chunk) = 0 then
+                        keep_open := false;
+                    else
+                        appendSpan(&!bytes, asSpan(&chunk));
+                    end if;
+                    destroyString(chunk);
+                when Left(left as failure: WaitFailure) do
+                    case failure of
+                        when WaitTimedOut do
+                            skip;
+                        when WaitFailed do
+                            keep_open := false;
+                    end case;
+            end case;
+            if bufferLength(&bytes) > mostMcpLine() then
+                keep_open := false;
+            end if;
+            if keep_open then
+                insertBack(&!clients, open);
+            else
+                let closed: Bool := closeFile(open);
+                clearBytes(&!bytes);
+            end if;
+        end if;
+        return McpLink(listener => listener, client => clients, pending => bytes, server => server, documents => documents);
+    end;
+
+    generic [B: Region]
+    function nthListener(listeners: &[Buffer[Listener], B]): &[Listener, B] is
+        return nthRef(listeners, 0);
+    end;
+
+    generic [R: Region]
+    function nextLine(link: &![McpLink, R]): Option[String] is
+        return lineOf(&!(link->pending));
+    end;
+
+    generic [B: Region]
+    function lineOf(pending: &![Buffer[Nat8], B]): Option[String] is
+        let cut: Index := lineEnd(&~pending);
+        if cut >= bufferLength(&~pending) then
+            let none: Option[String] := None();
+            return none;
+        end if;
+        let line: Buffer[Nat8] := takeLine(pending, cut);
+        let text: String := fromSpan(wholeSpan(&line));
+        destroyFree(line);
+        return Some(value => text);
+    end;
+
+    generic [R: Region, L: Region]
+    function stepOf(link: &![McpLink, R], line: Span[Nat8, L]): McpStep is
+        return handleLine(&!(link->server), line);
+    end;
+
+    generic [R: Region, L: Region]
+    function sendLine(link: &![McpLink, R], line: Span[Nat8, L]): Unit is
+        sendTo(&!(link->client), line);
+        return nil;
+    end;
+
+    generic [B: Region, L: Region]
+    function sendTo(clients: &![Buffer[FileDescriptor], B], line: Span[Nat8, L]): Unit is
+        if bufferLength(&~clients) = 0 then
+            return nil;
+        end if;
+        var open: FileDescriptor := removeLast(&~clients);
+        var bytes: Buffer[Nat8] := allocateEmpty();
+        appendSpan(&!bytes, line);
+        insertBack(&!bytes, 10);
+        case writeWithin(&!open, wholeSpan(&bytes), 10000) of
+            when Right(right as sent: Unit) do
+                insertBack(&~clients, open);
+            when Left(left as failure: WaitFailure) do
+                let closed: Bool := closeFile(open);
+        end case;
+        destroyFree(bytes);
+        return nil;
+    end;
+
+    generic [R: Region, I: Region, T: Region]
+    function replyOf(link: &[McpLink, R], id: Span[Nat8, I], text: Span[Nat8, T], failed: Bool): String is
+        return toolReply(&(link->server), id, text, failed);
+    end;
+
+    generic [T: Region, A: Region]
+    function runOnLink(link: McpLink, tool: Span[Nat8, T], arguments: Span[Nat8, A], fonts: PdfFontFiles): LinkRun is
+        let { listener: Buffer[Listener], client: Buffer[FileDescriptor], pending: Buffer[Nat8], server: McpServer, documents: Documents } := link;
+        let done: DocumentRun := runDocumentTool(documents, tool, arguments, fonts);
+        let { documents as after: Documents, text: String, failed: Bool } := done;
+        return LinkRun(link => McpLink(listener => listener, client => client, pending => pending, server => server, documents => after), text => text, failed => failed);
+    end;
+end module body.

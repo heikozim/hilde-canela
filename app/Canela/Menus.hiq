@@ -1,0 +1,302 @@
+--
+-- Part of Canela, a live Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+import Wolly.EditorCommands (
+    commandName
+);
+import Wolly.Platform (
+    addMenu,
+    addMenuItem,
+    addMenuSeparator,
+    addSubmenu,
+    endSubmenu,
+    menuAbout,
+    menuHide,
+    menuHideOthers,
+    menuShowAll,
+    menuMinimize,
+    menuZoom,
+    menuFullScreen,
+    keyReturn,
+    keyF8,
+    keyF9,
+    modCommand,
+    modShift,
+    modOption,
+    modControl
+);
+
+module body Canela.Menus is
+    -- The commands of the menu bar beyond those of Wolly.EditorCommands
+    -- (0 to 40); the window system's own are 1000 and up (Wolly.Platform).
+    constant command_new: Index := 100;
+    constant command_open: Index := 101;
+    constant command_save_as: Index := 102;
+    constant command_palette: Index := 103;
+    constant command_quit: Index := 104;
+    constant command_source: Index := 105;
+    constant command_find: Index := 106;
+    constant command_replace: Index := 107;
+    constant command_find_next: Index := 108;
+    constant command_find_previous: Index := 109;
+    constant command_focus: Index := 110;
+    constant command_typewriter: Index := 111;
+    constant command_wide: Index := 112;
+    constant command_outline: Index := 113;
+    constant command_settings: Index := 114;
+    constant command_larger: Index := 115;
+    constant command_smaller: Index := 116;
+    constant command_normal_size: Index := 117;
+    constant command_files: Index := 118;
+    constant command_sidebar: Index := 119;
+    constant command_export_html: Index := 120;
+    constant command_export_pdf: Index := 121;
+    constant command_paste_text: Index := 122;
+    constant command_theme_next: Index := 123;
+    constant command_theme_previous: Index := 124;
+    constant command_emoji: Index := 125;
+    constant command_document_mode: Index := 126;
+    constant command_revert: Index := 127;
+    constant command_export_epub: Index := 128;
+    constant command_new_tab: Index := 129;
+    constant command_next_tab: Index := 130;
+    constant command_previous_tab: Index := 131;
+    constant command_export_latex: Index := 132;
+    constant command_export_docx: Index := 133;
+    constant command_export_odt: Index := 134;
+    constant command_print: Index := 135;
+    constant command_search_files: Index := 136;
+    constant command_statistics: Index := 137;
+    constant command_versions: Index := 138;
+    constant command_grammar: Index := 139;
+    constant command_grammar_server: Index := 140;
+    constant command_table_first: Index := 141;
+    constant command_table_last: Index := 151;
+    constant command_publish: Index := 152;
+    constant command_publish_target: Index := 153;
+    constant command_publish_after: Index := 154;
+    constant command_picture_first: Index := 155;
+    constant command_picture_last: Index := 158;
+    constant command_plain_mode: Index := 159;
+    constant command_insert_bunti: Index := 160;
+    constant command_insert_qr: Index := 161;
+    constant command_reading: Index := 162;
+    constant command_line_numbers: Index := 163;
+    constant command_mirco_run: Index := 164;
+    constant command_syntax: Index := 165;
+    constant command_csv_table: Index := 166;
+    constant command_diff_saved: Index := 167;
+    constant command_diff_tab: Index := 168;
+    constant command_mirco_line: Index := 169;
+    constant command_mirco_again: Index := 170;
+    constant command_diff_file: Index := 171;
+    constant command_diff_sides: Index := 172;
+    constant command_block_up: Index := 173;
+    constant command_block_down: Index := 174;
+
+    -- One entry of the menu bar: its name in the language of the user
+    -- interface, its key with modifiers, its command.
+    generic [G: Region, E: Region]
+    function menuItem(german: Bool, de: Span[Nat8, G], en: Span[Nat8, E], key: Int32, modifiers: Int32, command: Index): Unit is
+        if german then
+            addMenuItem(de, key, modifiers, command);
+        else
+            addMenuItem(en, key, modifiers, command);
+        end if;
+        return nil;
+    end;
+
+    -- An entry for a command of Wolly.EditorCommands under its own name.
+    function formatItem(german: Bool, id: Index, key: Int32, modifiers: Int32): Unit is
+        addMenuItem(commandName(id, german), key, modifiers, id);
+        return nil;
+    end;
+
+    -- The menu bar of Canela: Canela, File, Edit, Paragraph, Format, Window.
+    function buildMenus(german: Bool): Unit is
+        let command: Int32 := modCommand();
+        let shift: Int32 := modShift() + modCommand();
+        let option: Int32 := modOption() + modCommand();
+        let none: Int32 := 0;
+        addMenu("Canela");
+        menuItem(german, "\u{dc}ber Canela", "About Canela", 0, none, menuAbout());
+        addMenuSeparator();
+        menuItem(german, "Einstellungen \u{2026}", "Settings\u{2026}", ',', command, command_settings);
+        addMenuSeparator();
+        menuItem(german, "Canela ausblenden", "Hide Canela", 'h', command, menuHide());
+        menuItem(german, "Andere ausblenden", "Hide Others", 'h', option, menuHideOthers());
+        menuItem(german, "Alle einblenden", "Show All", 0, none, menuShowAll());
+        addMenuSeparator();
+        menuItem(german, "Canela beenden", "Quit Canela", 'q', command, command_quit);
+        if german then
+            addMenu("Ablage");
+        else
+            addMenu("File");
+        end if;
+        menuItem(german, "Neu", "New", 'n', command, command_new);
+        menuItem(german, "Neuer Tab", "New Tab", 't', command, command_new_tab);
+        menuItem(german, "\u{d6}ffnen \u{2026}", "Open\u{2026}", 'o', command, command_open);
+        menuItem(german, "Dateien im Ordner \u{2026}", "Files in Folder\u{2026}", 'o', shift, command_files);
+        addMenuSeparator();
+        menuItem(german, "Schlie\u{df}en", "Close", 'w', command, 32);
+        menuItem(german, "N\u{e4}chster Tab", "Next Tab", 0, none, command_next_tab);
+        menuItem(german, "Vorheriger Tab", "Previous Tab", 0, none, command_previous_tab);
+        menuItem(german, "Sichern", "Save", 's', command, 25);
+        menuItem(german, "Sichern unter \u{2026}", "Save As\u{2026}", 's', shift, command_save_as);
+        menuItem(german, "Zur\u{fc}ck zur gesicherten Version", "Revert to Saved", 0, none, command_revert);
+        menuItem(german, "Versionen \u{2026}", "Versions\u{2026}", 0, none, command_versions);
+        addMenuSeparator();
+        menuItem(german, "Ver\u{f6}ffentlichen \u{2026}", "Publish\u{2026}", 0, none, command_publish);
+        menuItem(german, "Ziel zum Ver\u{f6}ffentlichen \u{2026}", "Publishing Target\u{2026}", 0, none, command_publish_target);
+        menuItem(german, "Befehl nach dem Ver\u{f6}ffentlichen \u{2026}", "Command after Publishing\u{2026}", 0, none, command_publish_after);
+        addMenuSeparator();
+        if german then
+            addSubmenu("Exportieren");
+        else
+            addSubmenu("Export");
+        end if;
+        menuItem(german, "HTML \u{2026}", "HTML\u{2026}", 'e', shift, command_export_html);
+        menuItem(german, "PDF \u{2026}", "PDF\u{2026}", 'e', option, command_export_pdf);
+        menuItem(german, "EPUB \u{2026}", "EPUB\u{2026}", 0, none, command_export_epub);
+        menuItem(german, "Word (DOCX) \u{2026}", "Word (DOCX)\u{2026}", 0, none, command_export_docx);
+        menuItem(german, "OpenDocument (ODT) \u{2026}", "OpenDocument (ODT)\u{2026}", 0, none, command_export_odt);
+        menuItem(german, "LaTeX \u{2026}", "LaTeX\u{2026}", 0, none, command_export_latex);
+        endSubmenu();
+        addMenuSeparator();
+        menuItem(german, "Drucken \u{2026}", "Print\u{2026}", 'p', command, command_print);
+        if german then
+            addMenu("Bearbeiten");
+        else
+            addMenu("Edit");
+        end if;
+        formatItem(german, 26, 'z', command);
+        formatItem(german, 27, 'z', shift);
+        addMenuSeparator();
+        formatItem(german, 30, 'x', command);
+        formatItem(german, 29, 'c', command);
+        formatItem(german, 31, 'v', command);
+        menuItem(german, "Als Text einsetzen", "Paste as Text", 'v', shift, command_paste_text);
+        formatItem(german, 28, 'a', command);
+        addMenuSeparator();
+        menuItem(german, "Emoji \u{2026}", "Emoji\u{2026}", 0, none, command_emoji);
+        addMenuSeparator();
+        menuItem(german, "Befehlspalette \u{2026}", "Command Palette\u{2026}", 'p', shift, command_palette);
+        addMenuSeparator();
+        menuItem(german, "Suchen \u{2026}", "Find\u{2026}", 'f', command, command_find);
+        menuItem(german, "Ersetzen \u{2026}", "Replace\u{2026}", 'f', option, command_replace);
+        menuItem(german, "In Dateien suchen \u{2026}", "Find in Files\u{2026}", 'f', shift, command_search_files);
+        menuItem(german, "Weitersuchen", "Find Next", 'g', command, command_find_next);
+        menuItem(german, "R\u{fc}ckw\u{e4}rts suchen", "Find Previous", 'g', shift, command_find_previous);
+        addMenuSeparator();
+        menuItem(german, "Grammatik pr\u{fc}fen \u{2026}", "Check Grammar\u{2026}", 'g', option, command_grammar);
+        menuItem(german, "Grammatik-Server \u{2026}", "Grammar Server\u{2026}", 0, none, command_grammar_server);
+        if german then
+            addMenu("Absatz");
+        else
+            addMenu("Paragraph");
+        end if;
+        formatItem(german, 7, '1', command);
+        formatItem(german, 8, '2', command);
+        formatItem(german, 9, '3', command);
+        formatItem(german, 10, '4', command);
+        formatItem(german, 11, '5', command);
+        formatItem(german, 12, '6', command);
+        formatItem(german, 6, '0', command);
+        addMenuSeparator();
+        var id: Index := 13;
+        while id <= 24 do
+            formatItem(german, id, 0, none);
+            id := id + 1;
+        end while;
+        addMenuSeparator();
+        formatItem(german, 33, keyReturn(), modOption());
+        addMenuSeparator();
+        formatItem(german, 34, keyReturn(), command);
+        addMenuSeparator();
+        menuItem(german, "BUNTI-Code einf\u{fc}gen", "Insert BUNTI Code", 'b', option, command_insert_bunti);
+        menuItem(german, "QR-Code einf\u{fc}gen", "Insert QR Code", 'r', option, command_insert_qr);
+        menuItem(german, "Block nach oben (\u{2325}\u{21e7}\u{2191})", "Move Block Up (\u{2325}\u{21e7}\u{2191})", 0, none, command_block_up);
+        menuItem(german, "Block nach unten (\u{2325}\u{21e7}\u{2193})", "Move Block Down (\u{2325}\u{21e7}\u{2193})", 0, none, command_block_down);
+        menuItem(german, "MIRCO-Zellen ausf\u{fc}hren", "Run MIRCO Cells", keyReturn(), shift, command_mirco_run);
+        menuItem(german, "MIRCO-Zeile rechnen", "Compute MIRCO Line", keyReturn(), option, command_mirco_line);
+        menuItem(german, "MIRCO-REPL neu rechnen", "Compute MIRCO REPL Again", 0, none, command_mirco_again);
+        addMenuSeparator();
+        menuItem(german, "Bild nach rechts drehen", "Turn Picture Right", 0, none, command_picture_first);
+        menuItem(german, "Bild nach links drehen", "Turn Picture Left", 0, none, command_picture_first + 1);
+        menuItem(german, "Bild spiegeln", "Mirror Picture", 0, none, command_picture_first + 2);
+        menuItem(german, "Bild halb so gro\u{df}", "Halve Picture", 0, none, command_picture_first + 3);
+        if german then
+            addMenu("Tabelle");
+        else
+            addMenu("Table");
+        end if;
+        menuItem(german, "Zeile dar\u{fc}ber einf\u{fc}gen", "Insert Row Above", 0, none, command_table_first);
+        menuItem(german, "Zeile darunter einf\u{fc}gen", "Insert Row Below", 0, none, command_table_first + 1);
+        formatItem(german, 36, 0, none);
+        addMenuSeparator();
+        menuItem(german, "Spalte links einf\u{fc}gen", "Insert Column Left", 0, none, command_table_first + 3);
+        formatItem(german, 35, 0, none);
+        formatItem(german, 37, 0, none);
+        addMenuSeparator();
+        formatItem(german, 38, 0, none);
+        formatItem(german, 39, 0, none);
+        formatItem(german, 40, 0, none);
+        addMenuSeparator();
+        menuItem(german, "Zeile nach oben", "Move Row Up", 0, none, command_table_first + 9);
+        menuItem(german, "Zeile nach unten", "Move Row Down", 0, none, command_table_first + 10);
+        addMenu("Format");
+        formatItem(german, 0, 'b', command);
+        formatItem(german, 1, 'i', command);
+        formatItem(german, 2, 'e', command);
+        formatItem(german, 3, 'x', shift);
+        formatItem(german, 4, 'h', shift);
+        formatItem(german, 5, 'k', command);
+        if german then
+            addMenu("Darstellung");
+        else
+            addMenu("View");
+        end if;
+        menuItem(german, "Quelltext zeigen (Markdown oder HTML)", "Show Source (Markdown or HTML)", '/', command, command_source);
+        menuItem(german, "Dokument: Markdown \u{2194} HTML", "Document: Markdown \u{2194} HTML", 'm', shift, command_document_mode);
+        menuItem(german, "Lesemodus", "Reading Mode", 'l', option, command_reading);
+        menuItem(german, "Zeilennummern", "Line Numbers", 'n', option, command_line_numbers);
+        menuItem(german, "Syntaxhervorhebung", "Syntax Highlighting", 'y', option, command_syntax);
+        menuItem(german, "CSV: Tabelle \u{2194} Text", "CSV: Table \u{2194} Text", 'u', option, command_csv_table);
+        menuItem(german, "Mit gesicherter Fassung vergleichen", "Compare with Saved", 'd', option, command_diff_saved);
+        menuItem(german, "Mit nächstem Tab vergleichen", "Compare with Next Tab", 'd', shift, command_diff_tab);
+        menuItem(german, "Mit Datei vergleichen \u{2026}", "Compare with File\u{2026}", 0, none, command_diff_file);
+        menuItem(german, "Vergleich nebeneinander", "Comparison Side by Side", 0, none, command_diff_sides);
+        menuItem(german, "Dokument: Klartext \u{2194} Markdown", "Document: Plain Text \u{2194} Markdown", 't', option, command_plain_mode);
+        menuItem(german, "Fokusmodus", "Focus Mode", keyF8(), none, command_focus);
+        menuItem(german, "Schreibmaschinenmodus", "Typewriter Mode", keyF9(), none, command_typewriter);
+        menuItem(german, "Gliederung \u{2026}", "Outline\u{2026}", 'l', shift, command_outline);
+        menuItem(german, "Statistik \u{2026}", "Statistics\u{2026}", 'i', shift, command_statistics);
+        menuItem(german, "Seitenleiste", "Sidebar", 's', modControl() + modCommand(), command_sidebar);
+        menuItem(german, "Breite Textspalte", "Wide Text Column", 0, none, command_wide);
+        addMenuSeparator();
+        menuItem(german, "Gr\u{f6}\u{df}er", "Larger", '+', command, command_larger);
+        menuItem(german, "Kleiner", "Smaller", '-', command, command_smaller);
+        menuItem(german, "Normale Gr\u{f6}\u{df}e", "Actual Size", 0, none, command_normal_size);
+        addMenuSeparator();
+        if german then
+            addSubmenu("Thema");
+        else
+            addSubmenu("Theme");
+        end if;
+        menuItem(german, "N\u{e4}chstes Thema", "Next Theme", 0, none, command_theme_next);
+        menuItem(german, "Voriges Thema", "Previous Theme", 0, none, command_theme_previous);
+        endSubmenu();
+        if german then
+            addMenu("Fenster");
+        else
+            addMenu("Window");
+        end if;
+        menuItem(german, "Im Dock ablegen", "Minimize", 'm', command, menuMinimize());
+        menuItem(german, "Zoomen", "Zoom", 0, none, menuZoom());
+        menuItem(german, "Vollbild", "Enter Full Screen", 'f', modControl() + modCommand(), menuFullScreen());
+        return nil;
+    end;
+end module body.

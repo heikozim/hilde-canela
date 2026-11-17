@@ -1,0 +1,105 @@
+--
+-- Part of Canela, a live Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+"""
+The menu bar of Canela: the menus Canela, File, Edit, Paragraph, Format,
+View and Window in German or English, and the numbers of the commands of
+the application beyond those of Wolly.EditorCommands (0 to 40); the window
+system's own are 1000 and up (Wolly.Platform).
+
+    buildMenus(systemGerman());
+"""
+module Canela.Menus is
+    -- The commands of the application, 100 to 119.
+    constant command_new: Index;
+    constant command_open: Index;
+    constant command_save_as: Index;
+    constant command_palette: Index;
+    constant command_quit: Index;
+    constant command_source: Index;
+    constant command_find: Index;
+    constant command_replace: Index;
+    constant command_find_next: Index;
+    constant command_find_previous: Index;
+    constant command_focus: Index;
+    constant command_typewriter: Index;
+    constant command_wide: Index;
+    constant command_outline: Index;
+    constant command_settings: Index;
+    constant command_larger: Index;
+    constant command_smaller: Index;
+    constant command_normal_size: Index;
+    constant command_files: Index;
+    constant command_sidebar: Index;
+    constant command_export_html: Index;
+    constant command_export_pdf: Index;
+    constant command_paste_text: Index;
+    constant command_theme_next: Index;
+    constant command_theme_previous: Index;
+    constant command_emoji: Index;
+    constant command_document_mode: Index;
+    constant command_revert: Index;
+    constant command_export_epub: Index;
+    constant command_new_tab: Index;
+    constant command_next_tab: Index;
+    constant command_previous_tab: Index;
+    constant command_export_latex: Index;
+    constant command_export_docx: Index;
+    constant command_export_odt: Index;
+    constant command_print: Index;
+    constant command_search_files: Index;
+    constant command_statistics: Index;
+    constant command_versions: Index;
+    constant command_grammar: Index;
+    constant command_grammar_server: Index;
+    -- The table commands, command_table_first to command_table_last, in
+    -- the order of Wolly.TableEdit.
+    constant command_table_first: Index;
+    constant command_table_last: Index;
+    constant command_publish: Index;
+    constant command_publish_target: Index;
+    constant command_publish_after: Index;
+    -- The picture commands, command_picture_first to command_picture_last:
+    -- turn right, turn left, mirror, half the size.
+    constant command_picture_first: Index;
+    constant command_picture_last: Index;
+    -- Plain text on and off for the document shown.
+    constant command_plain_mode: Index;
+    -- A Bunti code and a QR code put in, of the selection or empty.
+    constant command_insert_bunti: Index;
+    constant command_insert_qr: Index;
+    -- The reading mode of the tab shown on and off.
+    constant command_reading: Index;
+    -- Line numbers on and off: for plain text and for Markdown and HTML apart.
+    constant command_line_numbers: Index;
+    -- The MIRCO cells of the document run, their output under each.
+    constant command_mirco_run: Index;
+    -- The colours of the language of a plain file on and off.
+    constant command_syntax: Index;
+    -- A file of CSV shown as a table or as its text.
+    constant command_csv_table: Index;
+    -- The document compared with its saved text, and with the next tab: the
+    -- difference in a new tab.
+    constant command_diff_saved: Index;
+    constant command_diff_tab: Index;
+    -- The line of the cursor in a block mirco-repl computed by MIRCO's REPL.
+    constant command_mirco_line: Index;
+    -- Every input line of the blocks mirco-repl computed again, from a new session.
+    constant command_mirco_again: Index;
+    -- The document compared with a file chosen in the dialog.
+    constant command_diff_file: Index;
+    -- Comparisons side by side (a table) or as diff -u.
+    constant command_diff_sides: Index;
+    -- The block of the cursor moved before the block above it, or after the one below.
+    constant command_block_up: Index;
+    constant command_block_down: Index;
+
+    """
+    Builds the menu bar, its texts German or English.
+    No contract: requests to the window system.
+    """
+    function buildMenus(german: Bool): Unit;
+end module.

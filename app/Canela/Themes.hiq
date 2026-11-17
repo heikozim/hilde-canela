@@ -1,0 +1,339 @@
+--
+-- Part of Canela, a Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+import Standard.Buffer (
+    Buffer,
+    allocateEmpty,
+    length as bufferLength,
+    nth,
+    storeNth,
+    insertBack,
+    appendSpan,
+    wholeSpan,
+    nthRef,
+    swapIndex,
+    removeLast,
+    destroyFree,
+    destroyEmpty
+);
+import Standard.String (
+    String,
+    asSpan,
+    length,
+    fromSpan,
+    fromByteBuffer,
+    destroyString
+);
+import Standard.Text (
+    substring
+);
+import Standard.File (
+    FileDescriptor,
+    Directory,
+    openRead,
+    readAll,
+    closeFile,
+    seekFile,
+    seek_from_start,
+    seek_from_end,
+    kindOfTarget,
+    sameKind,
+    kind_regular,
+    openDirectory,
+    nextEntry,
+    closeDirectory
+);
+
+module body Canela.Themes is
+    -- Bytes of the names and texts, and for each theme four places in them:
+    -- name start, name stop, text start, text stop.
+    record Themes: Linear is
+        pool: Buffer[Nat8];
+        places: Buffer[Index];
+    end;
+
+    -- A warm light ground for long reading.
+    constant papier: Span[Nat8, Static] := "-- Papier\nappearance = light\nground = #f6f1e7\ntext = #3b3226\nmarker = #a89878\nlink = #8a4b08\ncode = #7a5230\ncode-ground = #ece4d4\nfence = #ece4d4\nrule = #d8ccb4\nbar = #c8b89a\nselection = #e8d9b5\nhighlight = #f3d77a\n";
+
+    -- A dark blue night; the light colours are left for a file built on it.
+    constant nacht: Span[Nat8, Static] := "-- Nacht\nappearance = dark\nground = #f4f6fa\ntext = #1f2633\nlink = #1f5fbf\nfence = #e9edf4\ncode-ground = #e9edf4\ndark.ground = #11161f\ndark.text = #c9d1e0\ndark.marker = #6b7894\ndark.link = #7fb4ff\ndark.code = #a8c1e6\ndark.code-ground = #1b2230\ndark.fence = #1b2230\ndark.rule = #2c3445\ndark.bar = #3b4660\ndark.selection = #29406b\ndark.highlight = #5b4a14\n";
+
+    generic [P: Region, Q: Region, N: Region, T: Region]
+    function addTheme(pool: &![Buffer[Nat8], P], places: &![Buffer[Index], Q], name: Span[Nat8, N], text: Span[Nat8, T]): Unit is
+        insertBack(&~places, bufferLength(&~pool));
+        appendSpan(&~pool, name);
+        insertBack(&~places, bufferLength(&~pool));
+        insertBack(&~places, bufferLength(&~pool));
+        appendSpan(&~pool, text);
+        insertBack(places, bufferLength(pool));
+        return nil;
+    end;
+
+    generic [F: Region]
+    function loadThemes(folder: Span[Nat8, F]): Themes is
+        var pool: Buffer[Nat8] := allocateEmpty();
+        var places: Buffer[Index] := allocateEmpty();
+        addTheme(&!pool, &!places, "Standard", "");
+        addTheme(&!pool, &!places, "Papier", papier);
+        addTheme(&!pool, &!places, "Nacht", nacht);
+        let names: Buffer[String] := themeFiles(folder);
+        var i: Index := 0;
+        while i < bufferLength(&names) do
+            addFile(&!pool, &!places, folder, &names, i);
+            i := i + 1;
+        end while;
+        destroyNames(names);
+        return Themes(pool => pool, places => places);
+    end;
+
+    -- The theme file names[i] of folder added, named without .theme.
+    generic [P: Region, Q: Region, F: Region, B: Region]
+    function addFile(pool: &![Buffer[Nat8], P], places: &![Buffer[Index], Q], folder: Span[Nat8, F], names: &[Buffer[String], B], i: Index): Unit is
+        let name: &[String, B] := nthRef(names, i);
+        let path: String := joined(folder, asSpan(name));
+        let text: String := smallFile(asSpan(&path));
+        destroyString(path);
+        let size: Index := length(name);
+        addTheme(pool, places, substring(asSpan(name), 0, size - 6), asSpan(&text));
+        destroyString(text);
+        return nil;
+    end;
+
+    generic [B: Region]
+    function nthName(names: &[Buffer[String], B], i: Index): &[String, B] is
+        return nthRef(names, i);
+    end;
+
+    function destroyThemes(themes: Themes): Unit is
+        let { pool: Buffer[Nat8], places: Buffer[Index] } := themes;
+        destroyFree(pool);
+        destroyFree(places);
+        return nil;
+    end;
+
+    generic [R: Region]
+    function themeCount(themes: &[Themes, R]): Index is
+        let count: Index := bufferLength(&(themes->places)) / 4;
+        if count < 3 then
+            return 3;
+        end if;
+        if count > 103 then
+            return 103;
+        end if;
+        return count;
+    end;
+
+    generic [R: Region]
+    function themeName(themes: &[Themes, R], i: Index): Span[Nat8, R] is
+        let places: &[Buffer[Index], R] := &(themes->places);
+        if ((i * 4) + 3) >= bufferLength(places) then
+            return substring(wholeSpan(&(themes->pool)), 0, 0);
+        end if;
+        return substring(wholeSpan(&(themes->pool)), nth(places, i * 4), nth(places, (i * 4) + 1));
+    end;
+
+    generic [R: Region]
+    function themeText(themes: &[Themes, R], i: Index): Span[Nat8, R] is
+        let places: &[Buffer[Index], R] := &(themes->places);
+        if ((i * 4) + 3) >= bufferLength(places) then
+            return substring(wholeSpan(&(themes->pool)), 0, 0);
+        end if;
+        return substring(wholeSpan(&(themes->pool)), nth(places, (i * 4) + 2), nth(places, (i * 4) + 3));
+    end;
+
+    generic [R: Region]
+    function themeLook(themes: &[Themes, R], i: Index): Index is
+        let text: Span[Nat8, R] := themeText(themes, i);
+        return lookOf(text);
+    end;
+
+    -- 1 for a line "appearance = light", 2 for "appearance = dark", else 0.
+    generic [T: Region]
+    function lookOf(text: Span[Nat8, T]): Index is
+        let size: Index := spanLength(text);
+        var ls: Index := 0;
+        while ls < size do
+            var le: Index := ls;
+            while (le < size) and (text[le] /= 10) do
+                le := le + 1;
+            end while;
+            let line: Span[Nat8, T] := substring(text, ls, le);
+            if same(line, "appearance = light") then
+                return 1;
+            else if same(line, "appearance = dark") then
+                return 2;
+            end if;
+            ls := le + 1;
+        end while;
+        return 0;
+    end;
+
+    generic [A: Region, B: Region]
+    function same(x: Span[Nat8, A], y: Span[Nat8, B]): Bool is
+        if spanLength(x) /= spanLength(y) then
+            return false;
+        end if;
+        var i: Index := 0;
+        while i < spanLength(x) do
+            if x[i] /= y[i] then
+                return false;
+            end if;
+            i := i + 1;
+        end while;
+        return true;
+    end;
+
+    -- The names *.theme of folder, not hidden, at most 100, sorted.
+    generic [F: Region]
+    function themeFiles(folder: Span[Nat8, F]): Buffer[String] is
+        var names: Buffer[String] := allocateEmpty();
+        case openDirectory(folder) of
+            when Some(value as directory: Directory) do
+                var open: Directory := directory;
+                var reading: Bool := true;
+                while reading do
+                    case nextEntry(&!open) of
+                        when Some(value as name: String) do
+                            if isThemeFile(asSpan(&name)) and (bufferLength(&names) < 100) then
+                                insertSorted(&!names, name);
+                            else
+                                destroyString(name);
+                            end if;
+                        when None do
+                            reading := false;
+                    end case;
+                end while;
+                let closed: Bool := closeDirectory(open);
+            when None do
+                skip;
+        end case;
+        return names;
+    end;
+
+    generic [N: Region]
+    function isThemeFile(name: Span[Nat8, N]): Bool is
+        let size: Index := spanLength(name);
+        if ((size <= 6) or (size > 255)) or (name[0] = '.') then
+            return false;
+        end if;
+        return ((((name[size - 6] = '.') and (name[size - 5] = 't')) and ((name[size - 4] = 'h') and (name[size - 3] = 'e'))) and (name[size - 2] = 'm')) and (name[size - 1] = 'e');
+    end;
+
+    -- name put where it belongs in the sorted names (by bytes).
+    generic [B: Region]
+    function insertSorted(names: &![Buffer[String], B], name: String): Unit is
+        insertBack(&~names, name);
+        var i: Index := bufferLength(&~names) - 1;
+        var moving: Bool := i > 0;
+        while moving do
+            let earlier: Bool := before(&~names, i, i - 1);
+            if earlier then
+                swapIndex(&~names, i, i - 1);
+                i := i - 1;
+            end if;
+            moving := earlier and (i > 0);
+        end while;
+        return nil;
+    end;
+
+    -- Whether name a comes before name b.
+    generic [B: Region]
+    function before(names: &![Buffer[String], B], a: Index, b: Index): Bool is
+        return lessAt(names, a, b);
+    end;
+
+    generic [B: Region]
+    function lessAt(names: &![Buffer[String], B], a: Index, b: Index): Bool is
+        let first: String := copyAt(&~names, a);
+        let second: String := copyAt(names, b);
+        let less: Bool := lessThan(asSpan(&first), asSpan(&second));
+        destroyString(first);
+        destroyString(second);
+        return less;
+    end;
+
+    generic [B: Region]
+    function copyAt(names: &![Buffer[String], B], i: Index): String is
+        return fromSpan(asSpan(nthRef(names, i)));
+    end;
+
+    generic [A: Region, C: Region]
+    function lessThan(x: Span[Nat8, A], y: Span[Nat8, C]): Bool is
+        var i: Index := 0;
+        while (i < spanLength(x)) and (i < spanLength(y)) do
+            if x[i] /= y[i] then
+                return x[i] < y[i];
+            end if;
+            i := i + 1;
+        end while;
+        return spanLength(x) < spanLength(y);
+    end;
+
+    -- folder and name joined by a slash.
+    generic [F: Region, N: Region]
+    function joined(folder: Span[Nat8, F], name: Span[Nat8, N]): String is
+        var bytes: Buffer[Nat8] := allocateEmpty();
+        appendSpan(&!bytes, folder);
+        appendSpan(&!bytes, "/");
+        appendSpan(&!bytes, name);
+        return fromByteBuffer(bytes);
+    end;
+
+    -- The regular file at path when it holds at most 65536 bytes, else empty.
+    generic [P: Region]
+    function smallFile(path: Span[Nat8, P]): String is
+        var empty: Buffer[Nat8] := allocateEmpty();
+        if not sameKind(kindOfTarget(path), kind_regular) then
+            return fromByteBuffer(empty);
+        end if;
+        case openRead(path) of
+            when Some(value as file: FileDescriptor) do
+                var open: FileDescriptor := file;
+                var fits: Bool := false;
+                case seekFile(&!open, 0, seek_from_end) of
+                    when Some(value as size: Int64) do
+                        fits := (size > 0) and (size <= 65536);
+                    when None do
+                        fits := false;
+                end case;
+                let read: Option[String] := readIfFits(&!open, fits);
+                let closed: Bool := closeFile(open);
+                case read of
+                    when Some(value as text: String) do
+                        destroyFree(empty);
+                        return text;
+                    when None do
+                        return fromByteBuffer(empty);
+                end case;
+            when None do
+                return fromByteBuffer(empty);
+        end case;
+    end;
+
+    generic [R: Region]
+    function readIfFits(file: &![FileDescriptor, R], fits: Bool): Option[String] is
+        if fits then
+            case seekFile(&~file, 0, seek_from_start) of
+                when Some(value as at: Int64) do
+                    return readAll(&~file);
+                when None do
+                    let none: Option[String] := None();
+                    return none;
+            end case;
+        end if;
+        let none: Option[String] := None();
+        return none;
+    end;
+
+    function destroyNames(names: Buffer[String]): Unit is
+        var all: Buffer[String] := names;
+        while bufferLength(&all) > 0 do
+            destroyString(removeLast(&!all));
+        end while;
+        destroyEmpty(all);
+        return nil;
+    end;
+end module body.

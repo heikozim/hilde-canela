@@ -1,0 +1,290 @@
+--
+-- Part of Canela, a live Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+import Standard.Buffer (
+    Buffer,
+    allocateEmpty,
+    insertBack,
+    nth,
+    storeNth,
+    appendSpan,
+    wholeSpan,
+    destroyFree,
+    length as bufferLength
+);
+import Standard.String (
+    String,
+    asSpan,
+    fromSpan,
+    length,
+    nthByte,
+    destroyString
+);
+import Standard.StringBuilder (
+    StringBuilder,
+    makeStringBuilder,
+    writeString,
+    finalize
+);
+import Standard.Text (
+    substring,
+    equal
+);
+import Standard.File (
+    Directory,
+    openDirectory,
+    nextEntry,
+    closeDirectory,
+    kindOfTarget,
+    sameKind,
+    kind_directory
+);
+import Wolly.EditorCommands (
+    findText,
+    noMatch
+);
+
+module body Canela.Files is
+    -- The names of a folder as the file panel lists them: their bytes in
+    -- pool, each from starts to stops, folders marked 1 in dirs, order the
+    -- shown order (.. first, then folders, then files, each by name).
+    record Listing: Linear is
+        pool: Buffer[Nat8];
+        starts: Buffer[Index];
+        stops: Buffer[Index];
+        dirs: Buffer[Nat8];
+        order: Buffer[Index];
+    end;
+
+    -- The most names the file panel reads from a folder.
+    constant most_entries: Index := 500;
+
+    function emptyListing(): Listing is
+        let pool: Buffer[Nat8] := allocateEmpty();
+        let starts: Buffer[Index] := allocateEmpty();
+        let stops: Buffer[Index] := allocateEmpty();
+        let dirs: Buffer[Nat8] := allocateEmpty();
+        let order: Buffer[Index] := allocateEmpty();
+        return Listing(pool => pool, starts => starts, stops => stops, dirs => dirs, order => order);
+    end;
+
+    function destroyListing(listing: Listing): Unit is
+        let { pool: Buffer[Nat8], starts: Buffer[Index], stops: Buffer[Index], dirs: Buffer[Nat8], order: Buffer[Index] } := listing;
+        destroyFree(pool);
+        destroyFree(starts);
+        destroyFree(stops);
+        destroyFree(dirs);
+        destroyFree(order);
+        return nil;
+    end;
+
+    generic [T: Region]
+    function addEntry(listing: Listing, name: Span[Nat8, T], dir: Bool): Listing is
+        let { pool: Buffer[Nat8], starts: Buffer[Index], stops: Buffer[Index], dirs: Buffer[Nat8], order: Buffer[Index] } := listing;
+        var all_pool: Buffer[Nat8] := pool;
+        var all_starts: Buffer[Index] := starts;
+        var all_stops: Buffer[Index] := stops;
+        var all_dirs: Buffer[Nat8] := dirs;
+        insertBack(&!all_starts, bufferLength(&all_pool));
+        appendSpan(&!all_pool, name);
+        insertBack(&!all_stops, bufferLength(&all_pool));
+        var mark: Nat8 := 0;
+        if dir then
+            mark := 1;
+        end if;
+        insertBack(&!all_dirs, mark);
+        return Listing(pool => all_pool, starts => all_starts, stops => all_stops, dirs => all_dirs, order => order);
+    end;
+
+    generic [R: Region]
+    function entryCount(listing: &[Listing, R]): Index is
+        return bufferLength(&(listing->order));
+    end;
+
+    -- Entry number i in the shown order.
+    generic [R: Region]
+    function entryAt(listing: &[Listing, R], i: Index): Index is
+        return nth(&(listing->order), i);
+    end;
+
+    generic [R: Region]
+    function entryName(listing: &[Listing, R], entry: Index): Span[Nat8, R] is
+        return substring(wholeSpan(&(listing->pool)), nth(&(listing->starts), entry), nth(&(listing->stops), entry));
+    end;
+
+    generic [R: Region]
+    function entryIsDir(listing: &[Listing, R], entry: Index): Bool is
+        return nth(&(listing->dirs), entry) = 1;
+    end;
+
+    -- Whether name a sorts before name b: .. first, folders before files,
+    -- then the bytes with the small and capital letters alike.
+    generic [R: Region]
+    function sortsBefore(listing: &[Listing, R], a: Index, b: Index): Bool is
+        let x: Span[Nat8, R] := entryName(listing, a);
+        let y: Span[Nat8, R] := entryName(listing, b);
+        if equal(x, "..") then
+            return true;
+        end if;
+        if equal(y, "..") then
+            return false;
+        end if;
+        let a_dir: Bool := entryIsDir(listing, a);
+        let b_dir: Bool := entryIsDir(listing, b);
+        if a_dir and (not b_dir) then
+            return true;
+        end if;
+        if b_dir and (not a_dir) then
+            return false;
+        end if;
+        var i: Index := 0;
+        while (i < spanLength(x)) and (i < spanLength(y)) do
+            let p: Nat8 := lowered(x[i]);
+            let q: Nat8 := lowered(y[i]);
+            if p < q then
+                return true;
+            end if;
+            if p > q then
+                return false;
+            end if;
+            i := i + 1;
+        end while;
+        return spanLength(x) < spanLength(y);
+    end;
+
+    function lowered(byte: Nat8): Nat8 is
+        if (byte >= 65) and (byte <= 90) then
+            return byte + 32;
+        end if;
+        return byte;
+    end;
+
+    -- How many names the listing holds.
+    generic [R: Region]
+    function nameTotal(listing: &[Listing, R]): Index is
+        return bufferLength(&(listing->starts));
+    end;
+
+    -- The listing with its order: every entry once, smallest first.
+    function sortListing(listing: Listing): Listing is
+        var taken: Buffer[Nat8] := allocateEmpty();
+        var k: Index := 0;
+        while k < nameTotal(&listing) do
+            let zero: Nat8 := 0;
+            insertBack(&!taken, zero);
+            k := k + 1;
+        end while;
+        var order: Buffer[Index] := allocateEmpty();
+        let count: Index := nameTotal(&listing);
+        var round: Index := 0;
+        while round < count do
+            var best: Index := count;
+            var i: Index := 0;
+            while i < count do
+                let used: Nat8 := nth(&taken, i);
+                if used = 0 then
+                    if best = count then
+                        best := i;
+                    else if sortsBefore(&listing, i, best) then
+                        best := i;
+                    end if;
+                end if;
+                i := i + 1;
+            end while;
+            let one: Nat8 := 1;
+            storeNth(&!taken, best, one);
+            insertBack(&!order, best);
+            round := round + 1;
+        end while;
+        destroyFree(taken);
+        let { pool: Buffer[Nat8], starts: Buffer[Index], stops: Buffer[Index], dirs: Buffer[Nat8], order as unsorted: Buffer[Index] } := listing;
+        destroyFree(unsorted);
+        return Listing(pool => pool, starts => starts, stops => stops, dirs => dirs, order => order);
+    end;
+
+    -- Whether a file of this name is one Canela opens: .md, .markdown, .txt, .html, .htm.
+    generic [T: Region]
+    function readableName(name: Span[Nat8, T]): Bool is
+        return ((endsWithText(name, ".md") or endsWithText(name, ".markdown")) or (endsWithText(name, ".txt") or endsWithText(name, ".html"))) or endsWithText(name, ".htm");
+    end;
+
+    generic [T: Region]
+    function endsWithText(name: Span[Nat8, T], tail: Span[Nat8, Static]): Bool is
+        if spanLength(name) < spanLength(tail) then
+            return false;
+        end if;
+        return equal(substring(name, spanLength(name) - spanLength(tail), spanLength(name)), tail);
+    end;
+
+    -- folder and name joined by a slash.
+    generic [F: Region, N: Region]
+    function joinPath(folder: Span[Nat8, F], name: Span[Nat8, N]): String is
+        var builder: StringBuilder := makeStringBuilder();
+        writeString(&!builder, folder);
+        if (spanLength(folder) > 0) and (folder[spanLength(folder) - 1] /= 47) then
+            writeString(&!builder, "/");
+        end if;
+        writeString(&!builder, name);
+        return finalize(builder);
+    end;
+
+    -- The folder the file panel lists, sorted; names that do not hold the
+    -- query, hidden names (a dot first) and files Canela does not open left out.
+    generic [F: Region, Q: Region]
+    function listFolder(folder: Span[Nat8, F], query: Span[Nat8, Q]): Listing is
+        var listing: Listing := emptyListing();
+        if spanLength(query) = 0 then
+            listing := addEntry(listing, "..", true);
+        end if;
+        case openDirectory(folder) of
+            when Some(value as directory: Directory) do
+                var open: Directory := directory;
+                var count: Index := 0;
+                var more: Bool := true;
+                while more and (count < most_entries) do
+                    case nextEntry(&!open) of
+                        when Some(value as name: String) do
+                            let shown: Bool := (length(&name) > 0) and (nthByte(&name, 0) /= 46);
+                            let found: Index := findText(asSpan(&name), query, 0, true);
+                            if shown and ((spanLength(query) = 0) or (found /= noMatch())) then
+                                let path: String := joinPath(folder, asSpan(&name));
+                                let dir: Bool := sameKind(kindOfTarget(asSpan(&path)), kind_directory);
+                                destroyString(path);
+                                if dir or readableName(asSpan(&name)) then
+                                    listing := addEntry(listing, asSpan(&name), dir);
+                                    count := count + 1;
+                                end if;
+                            end if;
+                            destroyString(name);
+                        when None do
+                            more := false;
+                    end case;
+                end while;
+                -- A folder only read: a failing close leaves nothing to undo.
+                let closed: Bool := closeDirectory(open);
+                ignore(closed);
+            when None do
+                skip;
+        end case;
+        return sortListing(listing);
+    end;
+
+    -- The folder of path: all before its last slash; "." for a bare name.
+    generic [P: Region]
+    function folderOf(path: Span[Nat8, P]): String is
+        var i: Index := spanLength(path);
+        while i > 0 do
+            i := i - 1;
+            if path[i] = 47 then
+                if i = 0 then
+                    return fromSpan("/");
+                end if;
+                return fromSpan(substring(path, 0, i));
+            end if;
+        end while;
+        return fromSpan(".");
+    end;
+end module body.

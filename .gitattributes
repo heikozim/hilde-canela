@@ -1,0 +1,9 @@
+# GitHub Linguist does not know Hilde (.hiq, .hih).  The helper scripts,
+# the web files and assets around it are not counted as the language of
+# this repository.
+*.sh linguist-detectable=false
+*.pl linguist-detectable=false
+*.js linguist-detectable=false
+*.mjs linguist-detectable=false
+*.css linguist-detectable=false
+*.html linguist-detectable=false

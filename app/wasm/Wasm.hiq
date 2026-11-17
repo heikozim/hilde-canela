@@ -1,0 +1,531 @@
+--
+-- Part of Canela, a live Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+
+-- The core of Canela as a library for wasm32-wasi, called by canela.js on a
+-- web page.  The module keeps nothing between calls: the page holds the
+-- source and the selection, gives both to every call and takes the new ones
+-- back.  A mode says what the source is: 0 Markdown, 1 HTML, 2 plain text.
+-- What a call writes for the page goes into the span out; every writing
+-- call answers the length of its whole answer, and writes it only when out
+-- holds it, so the page calls again with a longer span when the answer is
+-- longer than out.
+
+import Standard.String (
+    String,
+    asSpan,
+    length,
+    destroyString
+);
+import Standard.StringBuilder (
+    StringBuilder,
+    makeStringBuilder,
+    writeByte,
+    writeString,
+    finalize
+);
+import Standard.Bulk (
+    copySpan
+);
+import Wolly.Editor (
+    Editor,
+    BlockKind,
+    ParagraphBlock,
+    HeadingBlock,
+    QuoteBlock,
+    BulletBlock,
+    OrderedBlock,
+    TaskBlock,
+    FenceBlock,
+    MermaidBlock,
+    RuleBlock,
+    TableBlock,
+    HtmlBlock,
+    DefinitionBlock,
+    TocBlock,
+    FrontMatterBlock,
+    EmptyBlock,
+    openEditor,
+    openHtmlEditor,
+    openPlainEditor,
+    openEditorFromHtml,
+    destroyEditor,
+    sourceText,
+    sourceLength,
+    toHtml,
+    blockCount,
+    blockKind,
+    blockStart,
+    blockStop,
+    blockContent,
+    blockContentStop,
+    blockLevel,
+    blockNumber,
+    blockChecked,
+    blockText,
+    anchorOffset,
+    cursorOffset,
+    setSelection,
+    selectWord,
+    selectLine,
+    selectAll,
+    moveLeft,
+    moveRight,
+    moveLineStart,
+    moveLineEnd,
+    insertText,
+    pressReturn,
+    pressShiftReturn,
+    deleteBackward,
+    deleteForward,
+    setHeading,
+    toggleTask,
+    pasteHtml
+);
+import Wolly.EditorCommands (
+    commandCount,
+    commandKind,
+    commandStyle,
+    commandName,
+    commandSyntax,
+    commandShortcut,
+    applyCommand,
+    replaceAll,
+    cursorInTable,
+    insertTable,
+    nextCell,
+    changeTable
+);
+import Wolly.MarkdownSpans (
+    Spans,
+    SpanKind,
+    EmphasisSpan,
+    StrongSpan,
+    StrikeSpan,
+    CodeSpan,
+    LinkSpan,
+    ImageSpan,
+    AutolinkSpan,
+    BareLinkSpan,
+    HtmlSpan,
+    EscapeSpan,
+    EntitySpan,
+    FootnoteSpan,
+    EmojiSpan,
+    SubscriptSpan,
+    SuperscriptSpan,
+    HighlightSpan,
+    MathSpan,
+    NoteSpan,
+    scanSpans,
+    destroySpans,
+    spanCount,
+    spanKind,
+    spanStart,
+    spanStop,
+    innerStart,
+    innerStop,
+    spanParent,
+    isRevealedBy
+);
+
+module body Canela.Wasm is
+    -- The byte of value at the place of 256 to the power of the shift: its
+    -- bytes little end first, as the page reads them with a Uint32Array.
+    function byteOf(value: Index, place: Index): Nat8 is
+        case toNat8((value / place) % 256) of
+            when Some(value as byte: Nat8) do
+                return byte;
+            when None do
+                return 0;
+        end case;
+    end;
+
+    -- Writes value as four bytes, little end first.
+    generic [R: Region]
+    function writeWord(builder: &![StringBuilder, R], value: Index): Unit is
+        writeByte(&~builder, byteOf(value, 1));
+        writeByte(&~builder, byteOf(value, 256));
+        writeByte(&~builder, byteOf(value, 65536));
+        writeByte(builder, byteOf(value, 16777216));
+        return nil;
+    end;
+
+    -- An editor of the mode over source: 1 HTML, 2 plain text, any other
+    -- Markdown.
+    generic [R: Region]
+    function openMode(mode: Index, source: Span[Nat8, R]): Editor is
+        if mode = 1 then
+            return openHtmlEditor(source);
+        else if mode = 2 then
+            return openPlainEditor(source);
+        end if;
+        return openEditor(source);
+    end;
+
+    -- Copies answer into out when it fits and gives back its length either
+    -- way; the answer is destroyed.
+    generic [S: Region]
+    function answer(text: String, out: Span![Nat8, S]): Index is
+        let size: Index := length(&text);
+        let room: Index := spanWriteLength(&out);
+        if size <= room then
+            copySpan(asSpan(&text), &~out, 0);
+        end if;
+        destroyString(text);
+        return size;
+    end;
+
+    -- The selection and the source of the editor, the answer of an edit:
+    -- the anchor and the head as four bytes each, then the source.
+    function editAnswer(editor: Editor): String is
+        var builder: StringBuilder := makeStringBuilder();
+        writeWord(&!builder, anchorOffset(&editor));
+        writeWord(&!builder, cursorOffset(&editor));
+        writeString(&!builder, sourceText(&editor));
+        destroyEditor(editor);
+        return finalize(builder);
+    end;
+
+    -- One edit: op names it, number and the texts first and second are its
+    -- arguments.
+    --   0 nothing (the source as the mode reads it)
+    --   1 type first          2 Return            3 Shift+Return
+    --   4 Backspace           5 Delete            6 heading of level number
+    --   7 tick the task of block number
+    --   8 left, 9 right, 10 start of line, 11 end of line; number 1 extends
+    --  12 select the word at number, 13 the line at number, 14 everything
+    --  15 paste: first the HTML, second the text, number 1 as plain text
+    generic [F: Region, G: Region]
+    function applyEdit(editor: Editor, op: Index, number: Index, first: Span[Nat8, F], second: Span[Nat8, G]): Editor is
+        if op = 1 then
+            return insertText(editor, first);
+        else if op = 2 then
+            return pressReturn(editor);
+        else if op = 3 then
+            return pressShiftReturn(editor);
+        else if op = 4 then
+            return deleteBackward(editor);
+        else if op = 5 then
+            return deleteForward(editor);
+        else if (op = 6) and (number <= 6) then
+            return setHeading(editor, number);
+        else if (op = 7) and (number < blockCount(&editor)) then
+            return toggleTask(editor, number);
+        else if op = 8 then
+            return moveLeft(editor, number = 1);
+        else if op = 9 then
+            return moveRight(editor, number = 1);
+        else if op = 10 then
+            return moveLineStart(editor, number = 1);
+        else if op = 11 then
+            return moveLineEnd(editor, number = 1);
+        else if (op = 12) and (number <= sourceLength(&editor)) then
+            return selectWord(editor, number);
+        else if (op = 13) and (number <= sourceLength(&editor)) then
+            return selectLine(editor, number);
+        else if op = 14 then
+            return selectAll(editor);
+        else if op = 15 then
+            return pasteHtml(editor, first, second, number = 1);
+        end if;
+        return applyCommandEdit(editor, op, number, first, second);
+    end;
+
+    -- The edits of Wolly.EditorCommands:
+    --  16 command number (a format of the table of commands)
+    --  17 a table of number / 100 columns and number % 100 rows
+    --  18 the next cell, number 1 the one before
+    --  19 table operation number of changeTable
+    --  20 replace every first by second
+    generic [F: Region, G: Region]
+    function applyCommandEdit(editor: Editor, op: Index, number: Index, first: Span[Nat8, F], second: Span[Nat8, G]): Editor is
+        if (op = 16) and (number < commandCount()) then
+            return applyCommand(editor, number);
+        else if op = 17 then
+            let columns: Index := number / 100;
+            let rows: Index := number % 100;
+            if ((columns >= 1) and (columns <= 16)) and ((rows >= 1) and (rows <= 64)) then
+                return insertTable(editor, columns, rows);
+            end if;
+        else if op = 18 then
+            return nextCell(editor, number /= 1);
+        else if (op = 19) and (number <= 10) then
+            return changeTable(editor, number);
+        else if (op = 20) and (spanLength(first) > 0) then
+            return replaceAll(editor, first, second);
+        end if;
+        return editor;
+    end;
+
+    -- Writes text as its length and its bytes.
+    generic [B: Region, T: Region]
+    function writeText(builder: &![StringBuilder, B], text: Span[Nat8, T]): Unit is
+        writeWord(&~builder, spanLength(text));
+        writeString(builder, text);
+        return nil;
+    end;
+
+    -- The table of commands for the page: their number, then each as its
+    -- kind (1 inline, 2 block, 3 action, 4 table), its style, then its name
+    -- (German when german is 1), its syntax and its shortcut, each as a
+    -- length and its bytes.
+    pragma Foreign_Export(External_Name => "canela_commands");
+    generic [S: Region]
+    function commands(german: Index, out: Span![Nat8, S]): Index is
+        var builder: StringBuilder := makeStringBuilder();
+        let count: Index := commandCount();
+        writeWord(&!builder, count);
+        var id: Index := 0;
+        while id < count do
+            writeWord(&!builder, commandKind(id));
+            writeWord(&!builder, commandStyle(id));
+            writeText(&!builder, commandName(id, german = 1));
+            writeText(&!builder, commandSyntax(id));
+            writeText(&!builder, commandShortcut(id));
+            id := id + 1;
+        end while;
+        return answer(finalize(builder), out);
+    end;
+
+    -- Whether the cursor stands in a table, for the tools of a table.
+    pragma Foreign_Export(External_Name => "canela_in_table");
+    generic [R: Region]
+    function inTable(mode: Index, source: Span[Nat8, R], anchor: Index, head: Index): Index is
+        var editor: Editor := openMode(mode, source);
+        let size: Index := sourceLength(&editor);
+        if (anchor <= size) and (head <= size) then
+            editor := setSelection(editor, anchor, head);
+        end if;
+        var found: Index := 0;
+        if cursorInTable(&editor) then
+            found := 1;
+        end if;
+        destroyEditor(editor);
+        return found;
+    end;
+
+    -- An edit of source with the selection from anchor to head; out gets
+    -- the new anchor and head, four bytes each, then the new source.  An
+    -- anchor or head past the end of the source is taken as its end.
+    pragma Foreign_Export(External_Name => "canela_edit");
+    generic [R: Region, F: Region, G: Region, S: Region]
+    function edit(mode: Index, source: Span[Nat8, R], anchor: Index, head: Index, op: Index, number: Index, first: Span[Nat8, F], second: Span[Nat8, G], out: Span![Nat8, S]): Index is
+        var editor: Editor := openMode(mode, source);
+        let size: Index := sourceLength(&editor);
+        var low: Index := anchor;
+        var high: Index := head;
+        if low > size then
+            low := size;
+        end if;
+        if high > size then
+            high := size;
+        end if;
+        editor := setSelection(editor, low, high);
+        editor := applyEdit(editor, op, number, first, second);
+        return answer(editAnswer(editor), out);
+    end;
+
+    -- The number the page knows a block kind by.
+    function blockCode(kind: BlockKind): Index is
+        case kind of
+            when ParagraphBlock do
+                return 0;
+            when HeadingBlock do
+                return 1;
+            when QuoteBlock do
+                return 2;
+            when BulletBlock do
+                return 3;
+            when OrderedBlock do
+                return 4;
+            when TaskBlock do
+                return 5;
+            when FenceBlock do
+                return 6;
+            when MermaidBlock do
+                return 7;
+            when RuleBlock do
+                return 8;
+            when TableBlock do
+                return 9;
+            when HtmlBlock do
+                return 10;
+            when DefinitionBlock do
+                return 11;
+            when TocBlock do
+                return 12;
+            when FrontMatterBlock do
+                return 13;
+            when EmptyBlock do
+                return 14;
+        end case;
+    end;
+
+    -- The number the page knows a span kind by.
+    function spanCode(kind: SpanKind): Index is
+        case kind of
+            when EmphasisSpan do
+                return 0;
+            when StrongSpan do
+                return 1;
+            when StrikeSpan do
+                return 2;
+            when CodeSpan do
+                return 3;
+            when LinkSpan do
+                return 4;
+            when ImageSpan do
+                return 5;
+            when AutolinkSpan do
+                return 6;
+            when BareLinkSpan do
+                return 7;
+            when HtmlSpan do
+                return 8;
+            when EscapeSpan do
+                return 9;
+            when EntitySpan do
+                return 10;
+            when FootnoteSpan do
+                return 11;
+            when EmojiSpan do
+                return 12;
+            when SubscriptSpan do
+                return 13;
+            when SuperscriptSpan do
+                return 14;
+            when HighlightSpan do
+                return 15;
+            when MathSpan do
+                return 16;
+            when NoteSpan do
+                return 17;
+        end case;
+    end;
+
+    -- Whether blocks of the kind hold inline Markdown whose spans the page
+    -- draws.
+    function hasSpans(kind: BlockKind): Bool is
+        case kind of
+            when ParagraphBlock | HeadingBlock | QuoteBlock | BulletBlock | OrderedBlock | TaskBlock | TableBlock do
+                return true;
+            when FenceBlock | MermaidBlock | RuleBlock | HtmlBlock | DefinitionBlock | TocBlock | FrontMatterBlock | EmptyBlock do
+                return false;
+        end case;
+    end;
+
+    -- A place of the source counted from base, 0 before it.
+    function inside(place: Index, base: Index): Index is
+        if place > base then
+            return place - base;
+        end if;
+        return 0;
+    end;
+
+    -- The spans of block i, each as seven words: kind, start, stop, start
+    -- and stop of its inside, parent and 1 when the selection shows its
+    -- markers; places counted from the start of the source.
+    generic [B: Region, E: Region]
+    function writeSpans(builder: &![StringBuilder, B], editor: &[Editor, E], i: Index, low: Index, high: Index): Unit is
+        let base: Index := blockStart(editor, i);
+        let stop: Index := blockStop(editor, i);
+        -- A selection outside the block shows none of its markers; taken
+        -- into the block it would stand at its start and open a span there.
+        let touches: Bool := (high >= base) and (low <= stop);
+        let spans: Spans := scanSpans(blockText(editor, i), "");
+        let count: Index := spanCount(&spans);
+        writeWord(&~builder, count);
+        var j: Index := 0;
+        while j < count do
+            writeWord(&~builder, spanCode(spanKind(&spans, j)));
+            writeWord(&~builder, base + spanStart(&spans, j));
+            writeWord(&~builder, base + spanStop(&spans, j));
+            writeWord(&~builder, base + innerStart(&spans, j));
+            writeWord(&~builder, base + innerStop(&spans, j));
+            writeWord(&~builder, spanParent(&spans, j));
+            var shown: Index := 0;
+            if touches and isRevealedBy(&spans, j, inside(low, base), inside(high, base)) then
+                shown := 1;
+            end if;
+            writeWord(&~builder, shown);
+            j := j + 1;
+        end while;
+        destroySpans(spans);
+        return nil;
+    end;
+
+    -- The layout of source for the page: the number of blocks, then each
+    -- block as nine words (kind, start, stop, start and stop of its content,
+    -- level, number, 1 when ticked, the number of its spans) followed by its
+    -- spans of seven words each (see writeSpans).  The selection from anchor
+    -- to head says which markers are shown.  The plain mode gives no spans.
+    pragma Foreign_Export(External_Name => "canela_layout");
+    generic [R: Region, S: Region]
+    function layout(mode: Index, source: Span[Nat8, R], anchor: Index, head: Index, out: Span![Nat8, S]): Index is
+        let editor: Editor := openMode(mode, source);
+        var low: Index := anchor;
+        var high: Index := head;
+        if head < anchor then
+            low := head;
+            high := anchor;
+        end if;
+        var builder: StringBuilder := makeStringBuilder();
+        let count: Index := blockCount(&editor);
+        writeWord(&!builder, count);
+        var i: Index := 0;
+        while i < count do
+            let kind: BlockKind := blockKind(&editor, i);
+            writeWord(&!builder, blockCode(kind));
+            writeWord(&!builder, blockStart(&editor, i));
+            writeWord(&!builder, blockStop(&editor, i));
+            writeWord(&!builder, blockContent(&editor, i));
+            writeWord(&!builder, blockContentStop(&editor, i));
+            writeWord(&!builder, blockLevel(&editor, i));
+            writeWord(&!builder, blockNumber(&editor, i));
+            var ticked: Index := 0;
+            if blockChecked(&editor, i) then
+                ticked := 1;
+            end if;
+            writeWord(&!builder, ticked);
+            if (mode = 0) and hasSpans(kind) then
+                writeSpans(&!builder, &editor, i, low, high);
+            else
+                writeWord(&!builder, 0);
+            end if;
+            i := i + 1;
+        end while;
+        destroyEditor(editor);
+        return answer(finalize(builder), out);
+    end;
+
+    -- The source of the mode as HTML for the page to store: Markdown
+    -- converted and cleaned, HTML cleaned, plain text escaped.
+    pragma Foreign_Export(External_Name => "canela_to_html");
+    generic [R: Region, S: Region]
+    function sourceToHtml(mode: Index, source: Span[Nat8, R], out: Span![Nat8, S]): Index is
+        let editor: Editor := openMode(mode, source);
+        let html: String := toHtml(&editor);
+        destroyEditor(editor);
+        return answer(html, out);
+    end;
+
+    -- The source of the mode over stored HTML: for Markdown the HTML made
+    -- Markdown, for HTML (and plain text) the HTML cleaned.
+    pragma Foreign_Export(External_Name => "canela_from_html");
+    generic [R: Region, S: Region]
+    function sourceFromHtml(mode: Index, html: Span[Nat8, R], out: Span![Nat8, S]): Index is
+        var editor: Editor := openHtmlEditor(html);
+        if mode = 0 then
+            destroyEditor(editor);
+            editor := openEditorFromHtml(html);
+        end if;
+        var builder: StringBuilder := makeStringBuilder();
+        writeString(&!builder, sourceText(&editor));
+        destroyEditor(editor);
+        return answer(finalize(builder), out);
+    end;
+end module body.

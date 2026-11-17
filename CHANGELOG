@@ -1,0 +1,408 @@
+canela (0.1.41) unstable; urgency=low
+
+  * The switch of editing and reading stands at the right end of the bar
+    of the document, no longer over the text; the bar stands always, also
+    with one tab.
+
+ -- Heiko Zimmermann  Tue, 17 Nov 2026 19:40:21 +0100
+
+canela (0.1.40) unstable; urgency=low
+
+  * HTML export: a JPEG XL picture becomes a PNG beside the page, as
+    most browsers do not show JPEG XL.
+  * EPUB export: a JPEG XL picture is in the book (it was left out).
+
+ -- Heiko Zimmermann  Mon, 16 Nov 2026 13:12:32 +0100
+
+canela (0.1.39) unstable; urgency=low
+
+  * Times: the head of each MIRCO output shows how long its cell ran
+    (Ausgabe · laden · 5,8 s); each REPL answer ends with its time, a
+    recomputed block with the time of all its inputs; while MIRCO
+    computes the title counts the seconds.
+  * Compute MIRCO Line computes the block again as one programme: a line
+    that binds a name again replaces the old binding (no H6020), the
+    lines after it get new answers.
+  * A message of the compiler under a REPL input is one short line.
+  * Markdown > HTML > Markdown keeps the whole info line of a code block
+    (the name of a MIRCO cell, the time of an output).
+
+ -- Heiko Zimmermann  Mon, 16 Nov 2026 11:55:51 +0100
+
+canela (0.1.38) unstable; urgency=low
+
+  * Compute MIRCO REPL Again gives all inputs to MIRCO as one programme
+    (tools/mirco-repl batch): the 16 inputs of the example take 4 s
+    instead of 33 to 41 s; with an older MIRCO they are computed one by
+    one as before.
+  * The results of MIRCO cells and REPL inputs are taken in within
+    50 ms of their end, not at the next second.
+
+ -- Heiko Zimmermann  Mon, 16 Nov 2026 10:25:19 +0100
+
+canela (0.1.37) unstable; urgency=low
+
+  * MIRCO REPL in the background: Compute MIRCO Line and Compute MIRCO
+    REPL Again no longer hold the window; each answer appears when it
+    is computed.
+  * A click on the head of a MIRCO cell (▶ MIRCO · name) runs the cells.
+  * A cell after a failed one says "Nicht gelaufen" instead of an empty
+    "Fehler:".
+  * Code blocks show their language or the MIRCO head on a line of their
+    own; the outputs of MIRCO lie on a green ground.
+  * Long lines of code wrap under their indentation.
+  * The return and command signs are drawn as text, not as emoji.
+  * SVG texts turned by a quarter turn are drawn (the y label of plots).
+
+ -- Heiko Zimmermann  Mon, 16 Nov 2026 02:43:44 +0100
+
+canela (0.1.36) unstable; urgency=low
+
+  * MIRCO cells run in the background: the window no longer hangs while
+    they compute (0.1.34 hung for the whole run, 25 s and more); the
+    title says "MIRCO rechnet", the outputs appear when the cells end.
+  * A click on a plot or a table block shows its source.
+  * HTML mode: front matter as the head, section numbers, references,
+    citations and index terms as the Markdown mode shows them, display
+    formulas, plots, table blocks, HTML tables as grids, figures with
+    their picture and caption; Markdown > HTML > Markdown keeps them.
+  * Code blocks without the cursor hide their lines of backticks; the
+    language stands in grey at the right.
+
+ -- Heiko Zimmermann  Mon, 16 Nov 2026 01:21:00 +0100
+
+canela (0.1.35) unstable; urgency=low
+
+  * Move Block Up and Move Block Down (Option Shift Up and Down): the
+    block of the cursor (a picture, a table, a paragraph) changes places
+    with the block above or below it, in Markdown and in HTML.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 23:22:48 +0100
+
+canela (0.1.34) unstable; urgency=low
+
+  * Document: Markdown <> HTML works from plain text too (through
+    Markdown); in the reading mode a notice says why nothing changes.
+  * Markdown files with .Md, .MARKDOWN, .mdown, .mkd and .mkdn open as
+    Markdown, not as plain text.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 22:55:03 +0100
+
+canela (0.1.33) unstable; urgency=low
+
+  * The caption of a labelled picture under it in the editor
+    (Abbildung N: text), as in the export.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 22:20:50 +0100
+
+canela (0.1.32) unstable; urgency=low
+
+  * The front matter shown as the head of the document (title, author,
+    date), its source only with the cursor inside.
+  * Section numbers in the editor with number-sections: true.
+  * Table blocks drawn as tables with their caption, plots with a label
+    captioned Abbildung N, as in the export.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 21:51:12 +0100
+
+canela (0.1.31) unstable; urgency=low
+
+  * The changed parts within the lines of a diff (diff -u) on a strong
+    ground, red for the old line, green for the new.
+  * A CSV table wider than the window rolls sideways.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 18:25:04 +0100
+
+canela (0.1.30) unstable; urgency=low
+
+  * A comparison side by side in colours: each row on the ground of its
+    mark, the changed part of a changed line on a stronger one.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 17:57:40 +0100
+
+canela (0.1.29) unstable; urgency=low
+
+  * Added Comparison Side by Side: a comparison as a table of the old
+    and the new lines with their numbers and a mark, drawn as a grid.
+  * The first row of a CSV table stays at the top when rolled.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 17:35:23 +0100
+
+canela (0.1.28) unstable; urgency=low
+
+  * Added the REPL of MIRCO in the document: in a block mirco-repl
+    Option Command Return computes the line of the cursor through
+    tools/mirco-repl and puts its answer under it; Compute MIRCO REPL
+    Again computes every line from a new session.
+  * Added the colours of Hilde to the blocks mirco and mirco-repl.
+  * Added Compare with File: the document against a file chosen.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 17:06:15 +0100
+
+canela (0.1.27) unstable; urgency=low
+
+  * Added syntax highlighting of plain files (Hilde, C, Go, Makefile,
+    shell, Perl, JSON, YAML, TOML, CSS, HTML, XML, XSLT and more), on and
+    off under View > Syntax Highlighting.
+  * Added CSV files shown as a table (comma, semicolon, tab or bar), or
+    as their text under View > CSV: Table <> Text.
+  * Added Compare with Saved and Compare with Next Tab: the difference as
+    diff -u writes it, in a new tab.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 16:22:26 +0100
+
+canela (0.1.26) unstable; urgency=low
+
+  * Added the texts of SVG pictures (labels, axes, titles) in the editor
+    and in the PDF.
+  * Added references and citations in the editor as the export writes
+    them (Abb. 1, Gl. (1), (Hooke 1678)); the source shows where the
+    cursor is.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 15:30:44 +0100
+
+canela (0.1.25) unstable; urgency=low
+
+  * Added MIRCO cells: code blocks fenced as mirco run with Shift Command
+    Return through tools/mirco-notebook, their text, pictures, tables and
+    errors put under each cell.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 14:47:57 +0100
+
+canela (0.1.24) unstable; urgency=low
+
+  * Added links and page numbers to the table of contents of the PDF
+    (each entry jumps to its heading, a leader of dots to its page); the
+    editor shows the terms of the index without their markers.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 14:11:54 +0100
+
+canela (0.1.23) unstable; urgency=low
+
+  * Added line numbers (View > Line Numbers, on for plain text) and a
+    cross on each tab that closes it after a question; fixed the switch
+    from HTML back to Markdown, which lost the front matter and display
+    formulas.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 13:41:21 +0100
+
+canela (0.1.22) unstable; urgency=low
+
+  * Added the reading mode (badge at the top right, View > Reading Mode):
+    no caret, no markers, no edit, links followed by a click; a file
+    opened shows no markers before it is touched; SVG pictures and labels
+    of figures, formulas and headings in the editor; JSON plots in the
+    exports; Canela offered for text and source files of any kind.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 13:00:43 +0100
+
+canela (0.1.21) unstable; urgency=low
+
+  * Fixed the look of the prompts for the grammar server and publishing:
+    a label, a field that keeps a long value inside it, a placeholder.
+
+ -- Heiko Zimmermann  Sun, 15 Nov 2026 11:38:32 +0100
+
+canela (0.1.20) unstable; urgency=low
+
+  * Added BUNTI and QR codes: a block fenced as bunti or qr is shown as
+    its code and exported as a picture; Insert BUNTI Code and Insert QR
+    Code in the Paragraph menu.
+
+ -- Heiko Zimmermann  Sat, 14 Nov 2026 18:16:05 +0100
+
+canela (0.1.19) unstable; urgency=low
+
+  * Added plain text: a file that is neither Markdown nor HTML (.sh, .txt,
+    .conf ...) opens as plain text and is saved byte for byte, its line
+    ends and rights kept; Document: Plain Text <-> Markdown switches.
+
+ -- Heiko Zimmermann  Sat, 14 Nov 2026 17:45:17 +0100
+
+canela (0.1.18) unstable; urgency=low
+
+  * Fixed the screen reader on Linux, which read the text box without a
+    name; it now names the document.
+
+ -- Heiko Zimmermann  Sat, 14 Nov 2026 16:30:50 +0100
+
+canela (0.1.17) unstable; urgency=low
+
+  * Added printing, the screen reader (GTK accessible text) and the
+    spelling check through enchant on Linux; the Debian package recommends
+    libenchant-2-2 and a dictionary.
+
+ -- Heiko Zimmermann  Sat, 14 Nov 2026 14:45:21 +0100
+
+canela (0.1.16) unstable; urgency=low
+
+  * Fixed the start on Linux, where Canela hung after the first frame in
+    GTK 4.18 (the shortcuts no longer go through GTK accelerators); added
+    JPEG XL pictures in the PDF, Word, ODT and EPUB export.
+
+ -- Heiko Zimmermann  Sat, 14 Nov 2026 14:16:20 +0100
+
+canela (0.1.15) unstable; urgency=low
+
+  * Added JPEG XL pictures in the editor; publishing a file by scp with
+    the lines that change shown first; pictures turned, mirrored and
+    halved into bilder/; a smoke window no longer takes the keyboard.
+
+ -- Heiko Zimmermann  Sat, 14 Nov 2026 12:34:06 +0100
+
+canela (0.1.14) unstable; urgency=low
+
+  * Added Canela for Linux on GTK 4, as a Debian package; fixed the lists
+    and formulas of the OpenDocument export, which LibreOffice showed at
+    the right edge and on the left; added the client certificate of the
+    grammar server.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 20:15:37 +0100
+
+canela (0.1.13) unstable; urgency=low
+
+  * Added a Table menu: a row above and below, a column left and right,
+    rows and columns removed, columns aligned, rows moved up and down; the
+    lines an edit does not touch stay as they are.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 10:31:56 +0100
+
+canela (0.1.12) unstable; urgency=low
+
+  * Added the grammar check by a LanguageTool server of your own: Edit >
+    Check Grammar lists the findings, Return puts the replacement in; off
+    until switched on in the settings, the server set in Edit > Grammar
+    Server (https only).
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 10:05:21 +0100
+
+canela (0.1.11) unstable; urgency=low
+
+  * Added the style sheet of the publisher to the PDF export: page size and
+    margins, header and footer, size and colour of the text, colour of the
+    headings, justification and the fonts of @font-face.
+  * Added versions: on saving Canela keeps the text (at most every five
+    minutes, 50 for each document); File > Versions brings one back.
+  * Added the entries of the table of contents to the Word export, so that
+    it shows before Word updates it.
+  * Added dropping files on the window and pasting pictures: a picture
+    goes into the folder bilder beside the document and into the text, a
+    Markdown, text or HTML file opens in a tab.
+  * Added VoiceOver: it reads the text and the selection of the window.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 06:16:43 +0100
+
+canela (0.1.10) unstable; urgency=low
+
+  * Added matrices, cases and aligned equations to formulas, in the editor,
+    the PDF, HTML, EPUB, DOCX and ODT.
+  * Added printing (Command+P): the PDF of the document through the print
+    dialog.
+  * Added the search in files (Command+Shift+F): every Markdown and text
+    file of the folder and below, Return opens the file at the hit.
+  * Added statistics (Command+Shift+I): words, characters, paragraphs and
+    reading time, also of the selection.
+  * Fixed long details running out of the panels.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 05:20:36 +0100
+
+canela (0.1.9) unstable; urgency=low
+
+  * Added the spelling check: words the spelling checker of macOS does not
+    know get red dots, two seconds after the last change; not in code,
+    links or formulas; it can be switched off in the settings.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 04:56:21 +0100
+
+canela (0.1.8) unstable; urgency=low
+
+  * Added the Word export (DOCX): headings as styles, numbered lists,
+    footnotes, tables, pictures, formulas Word can edit, plots as pictures.
+  * Added the OpenDocument export (ODT): the same for LibreOffice, formulas
+    as LibreOffice Math objects, a filled table of contents.
+  * Added DOCX and ODT to the export of the MCP server.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 04:28:50 +0100
+
+canela (0.1.7) unstable; urgency=low
+
+  * Added the LaTeX export: a source for pdfLaTeX, XeLaTeX and LuaLaTeX with
+    the title, formulas as written, tables, footnotes, pictures relative to
+    the folder of the document and plots drawn as in Canela.
+  * Added LaTeX to the export of the MCP server.
+  * Added notes {>>like this<<}: grey in the text, left out of every export.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 03:52:33 +0100
+
+canela (0.1.6) unstable; urgency=low
+
+  * Added tabs: several documents in one window, opened with Command+T,
+    Command+O or from the Finder, switched by a click, Control+Tab or
+    Command+1 to 9, closed with Command+W.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 04:30:00 +0100
+
+canela (0.1.5) unstable; urgency=low
+
+  * Added books: a main document names its chapters in the front matter, the
+    export puts them together, each chapter on a new page in the PDF.
+  * Added the style sheet of a publisher (css:) to the HTML and EPUB export.
+  * Added numbered sections with references to them, and an index.
+  * Added tables of CSV and JSON data in code blocks of the language table.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 04:00:00 +0100
+
+canela (0.1.4) unstable; urgency=low
+
+  * Added citations of a BibTeX file named in the front matter, author and
+    year or numbered, and the list of works cited, in every export.
+  * Added numbered figures, tables and equations and references to them.
+  * Added JSON files as the data of plots.
+  * Fixed the PDF and HTML export showing the front matter as text.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 03:30:00 +0100
+
+canela (0.1.3) unstable; urgency=low
+
+  * Added plots of CSV data in code blocks of the language plot: line, bar,
+    scatter and histogram, with axes, legend and error bars, in the editor
+    and in the HTML, EPUB and PDF export; the data inline or in a file beside
+    the document.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 03:00:00 +0100
+
+canela (0.1.2) unstable; urgency=low
+
+  * Added inline formulas ($...$) set within their line in the editor.
+  * Fixed the size of PDFs with formulas: the math font is embedded with the
+    glyphs used only.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 02:30:00 +0100
+
+canela (0.1.1) unstable; urgency=low
+
+  * Added the version in the About window and canela --version.
+  * Added formulas in LaTeX ($...$ and $$...$$) as MathML in the HTML and
+    EPUB export.
+  * Added formulas set in STIX Two Math in the PDF export and, for $$ blocks,
+    in the editor.
+  * Added Export > EPUB: a book with its chapters, cover and pictures.
+  * Added page numbers in the PDF footer, a PDF outline of the headings,
+    page breaks and justified text as a setting.
+  * Added Mermaid diagrams: flowcharts, sequence, state, class, entity
+    relationship, Gantt and pie charts, in the editor and in every export.
+  * Added canela --mcp, an MCP server for Claude Desktop that reads and
+    edits the open documents.
+  * Added the settings window (Command+comma).
+  * Fixed Papier to stay light and Nacht to stay dark.
+  * Fixed the MCP proxy, which lost answers that came after its input ended.
+
+ -- Heiko Zimmermann  Fri, 13 Nov 2026 01:30:00 +0100
+
+canela (0.1.0) unstable; urgency=low
+
+  * First version: live Markdown editing, themes, the outline, the files of
+    a folder, pictures, emoji, links and footnotes, HTML mode, export as
+    HTML and PDF, autosave.
+
+ -- Heiko Zimmermann  Wed, 11 Nov 2026 20:00:00 +0100

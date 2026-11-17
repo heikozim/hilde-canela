@@ -1,0 +1,34 @@
+--
+-- Part of Canela, a live Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+"""
+Canela on macOS: one window over one Markdown file, rendered while it is
+typed (spec v0 B1.1, B1.2), on the core of Wolly (Wolly.Editor,
+Wolly.EditorView, Wolly.Platform).
+
+The file named on the command line is opened, or a new one made under that
+name when it does not exist; the file is plain Markdown (B1.3) and is
+written only by Command+S and when the window closes with changes, each time
+as a whole, atomically.  Keys: typing and the input method, Return,
+Shift+Return, Backspace, Delete, the arrows (with Shift a selection), Home
+and End, Page Up and Down; Command+Z undo, Command+Shift+Z redo, Command+S
+save, Command+1 to 6 a heading, Command+0 a paragraph, Command+A all,
+Command+C, X and V the clipboard, Command+W and Q close.  A click places the
+cursor or ticks a task.
+
+Limits: one file a window; no menu, no file dialog, no search; the fonts
+are Arial and Menlo of macOS, without a fallback for other scripts.
+
+    canela notes.md
+"""
+module Canela.App is
+    """
+    Opens the window over the file named by the first argument and runs
+    until it closes; the exit status is 1 when the last save failed.
+    No contract: the entry of the programme.
+    """
+    function main(root: RootCapability): ExitCode;
+end module.

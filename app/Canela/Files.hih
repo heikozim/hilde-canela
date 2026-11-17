@@ -1,0 +1,90 @@
+--
+-- Part of Canela, a live Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+"""
+The names of a folder as the file panel of Canela lists them: .. first,
+then the folders, then the files Canela opens (.md, .markdown, .txt, .html,
+.htm), each by name with small and capital letters alike; hidden names (a
+dot first) and names that do not hold the filter left out; at most 500
+names read.
+
+    let listing: Listing := listFolder(".", "");
+    let first: Span[Nat8, R] := entryName(&listing, entryAt(&listing, 0));
+"""
+import Standard.String (
+    String,
+    length
+);
+
+module Canela.Files is
+    """
+    The names of a folder, in the order they are shown.
+    """
+    type Listing: Linear;
+
+    """
+    The folder listed: names that do not hold query (compared without case)
+    left out; .. only with an empty query.
+    """
+    generic [F: Region, Q: Region]
+    function listFolder(folder: Span[Nat8, F], query: Span[Nat8, Q]): Listing
+        requires (spanLength(folder) <= 4096) and (spanLength(query) <= 256)
+        ensures entryCount(&result) <= 501;
+
+    """
+    Gives the listing back.
+    No contract: it only frees what it is given.
+    """
+    function destroyListing(listing: Listing): Unit;
+
+    """
+    How many names the listing shows.
+    """
+    generic [R: Region]
+    function entryCount(listing: &[Listing, R]): Index
+        ensures result <= 501;
+
+    """
+    The name shown at place i, as an entry for entryName and entryIsDir.
+    """
+    generic [R: Region]
+    function entryAt(listing: &[Listing, R], i: Index): Index
+        requires i < entryCount(listing)
+        ensures result <= 500;
+
+    """
+    The name of an entry.
+    No contract: a name as the file system stores it, of any length it allows.
+    """
+    generic [R: Region]
+    function entryName(listing: &[Listing, R], entry: Index): Span[Nat8, R]
+        requires entry <= 500;
+
+    """
+    Whether an entry is a folder (.. is one).
+    No contract: the answer is a Bool, nothing cheaper holds.
+    """
+    generic [R: Region]
+    function entryIsDir(listing: &[Listing, R], entry: Index): Bool
+        requires entry <= 500;
+
+    """
+    folder and name joined by one slash.
+    """
+    generic [F: Region, N: Region]
+    function joinPath(folder: Span[Nat8, F], name: Span[Nat8, N]): String
+        requires (spanLength(folder) <= 4096) and (spanLength(name) <= 4096)
+        ensures length(&result) >= spanLength(name);
+
+    """
+    The folder of path: all before its last slash, / for a name at the
+    root, . for a bare name.
+    """
+    generic [P: Region]
+    function folderOf(path: Span[Nat8, P]): String
+        requires spanLength(path) <= 4096
+        ensures length(&result) >= 1;
+end module.

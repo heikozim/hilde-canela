@@ -1,0 +1,69 @@
+--
+-- Part of Canela, a Markdown editor in Hilde.
+--
+-- SPDX-FileCopyrightText: 2026 Heiko Zimmermann
+-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+--
+"""
+The themes Canela offers: Standard (the colours built in), Papier and
+Nacht, then the files *.theme of the themes folder, sorted by name, each
+named after its file without .theme; at most 100 files of at most 65536
+bytes, hidden names left out.  A theme is the text of a theme file of
+Wolly.EditorView.applyTheme; a line "appearance = light" or "appearance =
+dark" draws it so whatever the appearance setting (Papier light, Nacht
+dark).
+
+    let themes: Themes := loadThemes("/Users/a/Library/Application Support/Canela/Themes");
+    let name: Span[Nat8, R] := themeName(&themes, 1);
+"""
+module Canela.Themes is
+    """
+    The themes found.  Linear: destroyThemes gives them back.
+    """
+    type Themes: Linear;
+
+    """
+    The three built-in themes and the theme files of folder.
+    """
+    generic [F: Region]
+    function loadThemes(folder: Span[Nat8, F]): Themes
+        requires spanLength(folder) <= 4096
+        ensures (themeCount(&result) >= 3) and (themeCount(&result) <= 103);
+
+    """
+    Gives the themes back.
+    No contract: it only frees what it is given.
+    """
+    function destroyThemes(themes: Themes): Unit;
+
+    """
+    How many themes there are.
+    """
+    generic [R: Region]
+    function themeCount(themes: &[Themes, R]): Index
+        ensures (result >= 3) and (result <= 103);
+
+    """
+    The name of theme i.
+    No contract: a name from a file name, of any length up to 255 bytes.
+    """
+    generic [R: Region]
+    function themeName(themes: &[Themes, R], i: Index): Span[Nat8, R]
+        requires i < themeCount(themes);
+
+    """
+    The text of theme i: empty for Standard.
+    No contract: the text of a file, of any length up to 65536 bytes.
+    """
+    generic [R: Region]
+    function themeText(themes: &[Themes, R], i: Index): Span[Nat8, R]
+        requires i < themeCount(themes);
+    """
+    How theme i draws: 1 always light (a line "appearance = light"), 2
+    always dark ("appearance = dark"), 0 as the appearance setting says.
+    """
+    generic [R: Region]
+    function themeLook(themes: &[Themes, R], i: Index): Index
+        requires i < themeCount(themes)
+        ensures result <= 2;
+end module.
